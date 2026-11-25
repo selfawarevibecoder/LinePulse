@@ -1,5 +1,6 @@
 import { ChartPane } from './chart-pane.js';
 import { ReplayController } from './replay-controller.js';
+import { applyDomTranslations, getLang, setLang, t } from './i18n.js';
 
 const ALL_SOURCES = ['oanda', 'cme', 'stocks', 'binance', 'coinbase', 'bybit', 'kraken'];
 const CRYPTO_SOURCES = new Set(['binance', 'coinbase', 'bybit', 'kraken']);
@@ -4088,6 +4089,18 @@ async function boot() {
   setInterval(fetchEconomicNewsFromServer, 10 * 60 * 1000);
 
   if (initialFeeds) renderFeedStatus(initialFeeds);
+
+  // Wire EN / TR live language switcher (topbar toggle + Settings dropdown)
+  applyDomTranslations(document);
+  document.getElementById('lang-toggle-btn')?.addEventListener('click', () => {
+    const next = getLang() === 'tr' ? 'en' : 'tr';
+    setLang(next);
+    showToast(t('lang.switchedTitle'), t('lang.switchedBody'));
+  });
+  document.getElementById('cfg-lang')?.addEventListener('change', (ev) => {
+    setLang(ev.target.value);
+    showToast(t('lang.switchedTitle'), t('lang.switchedBody'));
+  });
 }
 
 boot();

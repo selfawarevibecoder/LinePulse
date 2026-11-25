@@ -1,5 +1,6 @@
 import { createChart, CrosshairMode, LineStyle, PriceScaleMode } from '/vendor/lightweight-charts.mjs';
 import { DrawingsPrimitive, computePositionToolMetrics } from './drawings-primitive.js';
+import { t } from './i18n.js';
 
 let colorProbeEl = null;
 
@@ -2372,7 +2373,7 @@ export class ChartPane {
       this.updateTimeframeOptions(this.timeframesList);
       this.callbacks.onNotify?.(
         tfCheck.title,
-        `Switched ${this.state.display} to ${fallbackTf} (${tfCheck.body})`
+        t('tf.switchedNotice', { display: this.state.display, fallback: fallbackTf, reason: tfCheck.body })
       );
     }
     this.selectedDrawingIds.clear();
@@ -2390,30 +2391,30 @@ export class ChartPane {
     if (this.replayMode) {
       return {
         ok: false,
-        title: '1m Minimum in Replay Mode',
-        body: `Offline backtest archives are stored at 1m resolution — "${clean}" is not available in Replay Mode.`,
+        title: t('tf.replayMinTitle'),
+        body: t('tf.replayMinBody', { tf: clean }),
       };
     }
     const src = String(source || '').toLowerCase();
     if (src === 'cme' || src === 'stocks' || src === 'databento' || src === 'dukascopy') {
       return {
         ok: false,
-        title: `${clean} Data Not Available`,
-        body: `${src.toUpperCase()} feed does not provide sub-minute (${clean}) candles — minimum timeframe is 1m.`,
+        title: t('tf.notAvailTitle', { tf: clean }),
+        body: t('tf.notAvailBody', { source: src.toUpperCase(), tf: clean }),
       };
     }
     if (src === 'oanda' && secs < 5) {
       return {
         ok: false,
-        title: 'OANDA Minimum is 5s',
-        body: `OANDA does not provide ${clean} candles — the lowest live timeframe on OANDA is 5s.`,
+        title: t('tf.oandaMinTitle'),
+        body: t('tf.oandaMinBody', { tf: clean }),
       };
     }
     if (src === 'coinbase' || src === 'bybit' || src === 'kraken') {
       return {
         ok: false,
-        title: `1m Minimum on ${src.toUpperCase()}`,
-        body: `${src.toUpperCase()} starts at 1m — use Binance for live 1s crypto candles.`,
+        title: t('tf.cryptoMinTitle', { source: src.toUpperCase() }),
+        body: t('tf.cryptoMinBody', { source: src.toUpperCase() }),
       };
     }
     return { ok: true };

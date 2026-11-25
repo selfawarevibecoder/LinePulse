@@ -7,6 +7,8 @@
  * - Analytics Dashboard: KPIs, Equity Curve Canvas, Trade Journal with Tags/Notes, CSV & JSON Export
  */
 
+import { t, onLangChange } from './i18n.js';
+
 const TF_SECONDS = {
   '1s': 1,
   '5s': 5,
@@ -178,6 +180,11 @@ export class ReplayController {
     this.reviewTimeFilter = null; // null = show all drawings, unixSec = show drawings <= step time
 
     this._bindDom();
+    onLangChange(() => {
+      this._syncArchiveEntriesToPrimarySelect();
+      this._renderArchiveEntries();
+      this._renderSavedSessionsList();
+    });
   }
 
   _bindDom() {
@@ -851,13 +858,9 @@ export class ReplayController {
   _confirmArchiveDownload({ source, display, actionLabel }) {
     const src = String(source || '').toLowerCase();
     if (src === 'databento') {
-      return window.confirm(
-        `⚠️ PAID DATA WARNING (Databento)\n\nDownloading Databento CME data (${display} — ${actionLabel}) will use your Databento credit / billing balance!\n(Only missing dates will be requested.)\n\nAre you sure you want to proceed?`
-      );
+      return window.confirm(t('confirm.databento', { display, action: actionLabel }));
     }
-    return window.confirm(
-      `ℹ️ Free Download Notice (${src.toUpperCase()})\n\n${display} (${actionLabel}) is free, but downloading large date ranges may take 30 seconds to several minutes.\n\nStart downloading now?`
-    );
+    return window.confirm(t('confirm.free', { source: src.toUpperCase(), display, action: actionLabel }));
   }
 
   _syncArchiveEntriesToPrimarySelect() {
@@ -907,10 +910,10 @@ export class ReplayController {
       this.rpsInstrumentEl.appendChild(og);
     };
 
-    appendOfflineGroup('📦 Offline Ready — CME Futures (Databento)', groups.databento);
-    appendOfflineGroup('📦 Offline Ready — OANDA (FX / Gold / DXY / Indices / Oil)', groups.oanda);
-    appendOfflineGroup('📦 Offline Ready — Binance Crypto', groups.binance);
-    appendOfflineGroup('📦 Offline Ready — Custom / Imported', groups.other);
+    appendOfflineGroup(t('grp.offlineCme'), groups.databento);
+    appendOfflineGroup(t('grp.offlineOanda'), groups.oanda);
+    appendOfflineGroup(t('grp.offlineBinance'), groups.binance);
+    appendOfflineGroup(t('grp.offlineCustom'), groups.other);
 
     // Online-only fallback pairs (ONLY shown if NOT already downloaded locally!)
     const onlineDefaults = [
@@ -938,7 +941,7 @@ export class ReplayController {
     const remainingOnline = onlineDefaults.filter((d) => !offlineKeys.has(`${d.source}:${d.symbol}`));
     if (remainingOnline.length) {
       const og = document.createElement('optgroup');
-      og.label = '🌐 Online Fetch (Requires Internet / API Key)';
+      og.label = t('grp.online');
       for (const d of remainingOnline) {
         const opt = document.createElement('option');
         opt.value = `${d.source}:${d.symbol}:${d.display}`;
@@ -958,7 +961,7 @@ export class ReplayController {
     this.arcEntriesListEl.innerHTML = '';
     if (!this.archiveEntries.length) {
       this.arcEntriesListEl.innerHTML =
-        '<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:12px;">No offline archives yet. Pick Dukascopy (Free 2003+), OANDA, Databento CME, or import a CSV above!</div>';
+        `<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:12px;">${escapeHtml(t('arc.empty'))}</div>`;
       return;
     }
 
@@ -982,20 +985,20 @@ export class ReplayController {
           <span class="saved-layout-meta"><b>1m:</b> ${fromStr} → ${toStr} (${Number(e.barCount || 0).toLocaleString()} bars)${h1Str}</span>
         </div>
         <div class="saved-layout-actions">
-          ${canAutoSync ? '<button type="button" class="btn-secondary arc-older-btn" title="Download 6 months of older 1m history before the start date (skips existing dates)">⏪ -6M</button>' : ''}
-          ${canAutoSync ? '<button type="button" class="btn-secondary arc-sync-btn" title="Fetch ONLY new missing bars since last download">🔄 Update</button>' : ''}
-          <button type="button" class="btn-primary arc-use-btn" title="Select this archive in Backtest setup">▶ Backtest</button>
-          <button type="button" class="btn-danger-sm arc-del-btn">Delete</button>
+          ${canAutoSync ? `<button type="button" class="btn-secondary arc-older-btn" title="${escapeHtml(t('action.extend6m'))}">${escapeHtml(t('arc.olderBtn'))}</button>` : ''}
+          ${canAutoSync ? `<button type="button" class="btn-secondary arc-sync-btn" title="${escapeHtml(t('action.updateMissing'))}">${escapeHtml(t('arc.updateBtn'))}</button>` : ''}
+          <button type="button" class="btn-primary arc-use-btn">${escapeHtml(t('arc.backtestBtn'))}</button>
+          <button type="button" class="btn-danger-sm arc-del-btn">${escapeHtml(t('arc.deleteBtn'))}</button>
         </div>
       `;
 
       card.querySelector('.arc-older-btn')?.addEventListener('click', async (ev) => {
-        if (!this._confirmArchiveDownload({ source: e.source, display: e.display, actionLabel: 'Extend 6 months older (1m)' })) {
+        if (!this._confirmArchiveDownload({ source: e.source, display: e.display, actionLabel: t('action.extend6m') })) {
           return;
         }
         const btn = ev.currentTarget;
         btn.disabled = true;
-        btn.textContent = 'Pulling...';
+        btn.textContent = t('arc.pulling');
         if (this.arcFeedbackEl) {
           this.arcFeedbackEl.textContent = `Downloading 6 months of older 1m bars for ${e.display}...`;
         }
@@ -1025,12 +1028,12 @@ export class ReplayController {
       });
 
       card.querySelector('.arc-sync-btn')?.addEventListener('click', async (ev) => {
-        if (!this._confirmArchiveDownload({ source: e.source, display: e.display, actionLabel: 'Update missing latest bars' })) {
+        if (!this._confirmArchiveDownload({ source: e.source, display: e.display, actionLabel: t('action.updateMissing') })) {
           return;
         }
         const btn = ev.currentTarget;
         btn.disabled = true;
-        btn.textContent = 'Syncing...';
+        btn.textContent = t('arc.syncing');
         if (this.arcFeedbackEl) this.arcFeedbackEl.textContent = `Fetching only missing bars for ${e.display}...`;
         try {
           const res = await fetch('/api/archive/download', {

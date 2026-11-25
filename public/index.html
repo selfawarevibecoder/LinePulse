@@ -175,6 +175,8 @@
           <span id="cme-status-text">CME</span>
         </button>
 
+        <button type="button" class="tool-btn" id="lang-toggle-btn" title="Switch language: English / Türkçe" aria-label="Language" style="min-width:34px;font-weight:700;font-size:11px;">EN</button>
+
         <button type="button" class="tool-btn" id="settings-btn" title="Settings &amp; API Keys" aria-label="Settings">
           <svg class="icon-sm" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <circle cx="8" cy="8" r="2.4" stroke="currentColor" stroke-width="1.4"/>
@@ -930,10 +932,19 @@
           </div>
         </div>
 
-        <label class="checkbox-row">
-          <input type="checkbox" id="cfg-show-grid" name="showGrid">
-          <span>Show background grid lines</span>
-        </label>
+        <div class="field-grid-2" style="margin-top:8px;">
+          <label class="checkbox-row">
+            <input type="checkbox" id="cfg-show-grid" name="showGrid">
+            <span>Show background grid lines</span>
+          </label>
+          <div class="field-row">
+            <label for="cfg-lang">Interface Language</label>
+            <select id="cfg-lang" name="language">
+              <option value="en">English (EN)</option>
+              <option value="tr">Türkçe (TR)</option>
+            </select>
+          </div>
+        </div>
       </section>
 
       <section class="settings-section">

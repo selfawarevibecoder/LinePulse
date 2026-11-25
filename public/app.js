@@ -1265,6 +1265,7 @@ function renderGrid() {
         callbacks: {
           onActivate: (id) => setActivePane(id),
           onOpenSymbolSearch: (id) => openSymbolDialog('pane', id),
+          onNotify: (title, body) => showToast(title, body),
           onOpenStyleDialog: (id) => openStyleDialog(id),
           onOpenTimezonePicker: () => openTimezoneDialog(),
           onOpenSettings: () => openSettingsDialog(),

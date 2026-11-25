@@ -848,18 +848,108 @@ export class ReplayController {
       .join('');
   }
 
+  _confirmArchiveDownload({ source, display, actionLabel }) {
+    const src = String(source || '').toLowerCase();
+    if (src === 'databento') {
+      return window.confirm(
+        `⚠️ PAID DATA WARNING (Databento)\n\nDownloading Databento CME data (${display} — ${actionLabel}) will use your Databento credit / billing balance!\n(Only missing dates will be requested.)\n\nAre you sure you want to proceed?`
+      );
+    }
+    return window.confirm(
+      `ℹ️ Free Download Notice (${src.toUpperCase()})\n\n${display} (${actionLabel}) is free, but downloading large date ranges may take 30 seconds to several minutes.\n\nStart downloading now?`
+    );
+  }
+
   _syncArchiveEntriesToPrimarySelect() {
     if (!this.rpsInstrumentEl) return;
-    const existing = new Set(Array.from(this.rpsInstrumentEl.options).map((o) => o.value));
-    for (const e of this.archiveEntries) {
-      const val = `${e.source}:${e.symbol}:${e.display}`;
-      if (!existing.has(val)) {
+    const prevValue = this.rpsInstrumentEl.value;
+    this.rpsInstrumentEl.innerHTML = '';
+
+    const offlineKeys = new Set();
+    const groups = {
+      databento: [],
+      oanda: [],
+      binance: [],
+      other: [],
+    };
+
+    const sorted = [...(this.archiveEntries || [])].sort((a, b) =>
+      String(a.display || a.symbol).localeCompare(String(b.display || b.symbol))
+    );
+
+    for (const e of sorted) {
+      const src = String(e.source || '').toLowerCase();
+      offlineKeys.add(`${src}:${e.symbol}`);
+      const bucket = groups[src] || groups.other;
+      bucket.push(e);
+    }
+
+    const fmtRange = (e) => {
+      const m1Start = e.firstTime ? new Date(e.firstTime * 1000).getUTCFullYear() : '';
+      const m1End = e.lastTime ? new Date(e.lastTime * 1000).getUTCFullYear() : '';
+      const h1Start = e.htf1hFirstTime ? new Date(e.htf1hFirstTime * 1000).getUTCFullYear() : '';
+      const parts = [];
+      if (m1Start && m1End) parts.push(`1m ${m1Start}–${m1End}`);
+      if (h1Start) parts.push(`1h ${h1Start}+`);
+      return parts.length ? ` (${parts.join(' · ')})` : ' (Offline)';
+    };
+
+    const appendOfflineGroup = (label, list) => {
+      if (!list.length) return;
+      const og = document.createElement('optgroup');
+      og.label = label;
+      for (const e of list) {
         const opt = document.createElement('option');
-        opt.value = val;
-        opt.textContent = `📦 ${e.source.toUpperCase()} · ${e.display} (Offline Archive)`;
-        this.rpsInstrumentEl.appendChild(opt);
-        existing.add(val);
+        opt.value = `${e.source}:${e.symbol}:${e.display}`;
+        opt.textContent = `📦 ${e.display}${fmtRange(e)}`;
+        og.appendChild(opt);
       }
+      this.rpsInstrumentEl.appendChild(og);
+    };
+
+    appendOfflineGroup('📦 Offline Ready — CME Futures (Databento)', groups.databento);
+    appendOfflineGroup('📦 Offline Ready — OANDA (FX / Gold / DXY / Indices / Oil)', groups.oanda);
+    appendOfflineGroup('📦 Offline Ready — Binance Crypto', groups.binance);
+    appendOfflineGroup('📦 Offline Ready — Custom / Imported', groups.other);
+
+    // Online-only fallback pairs (ONLY shown if NOT already downloaded locally!)
+    const onlineDefaults = [
+      { source: 'oanda', symbol: 'XAU_USD', display: 'XAU/USD (Gold)' },
+      { source: 'oanda', symbol: 'EUR_USD', display: 'EUR/USD' },
+      { source: 'oanda', symbol: 'GBP_USD', display: 'GBP/USD' },
+      { source: 'oanda', symbol: 'DXY', display: 'DXY (US Dollar Index)' },
+      { source: 'oanda', symbol: 'NAS100_USD', display: 'NAS100' },
+      { source: 'oanda', symbol: 'SPX500_USD', display: 'SPX500' },
+      { source: 'oanda', symbol: 'US30_USD', display: 'US30' },
+      { source: 'oanda', symbol: 'USD_JPY', display: 'USD/JPY' },
+      { source: 'oanda', symbol: 'USD_CAD', display: 'USD/CAD' },
+      { source: 'oanda', symbol: 'AUD_USD', display: 'AUD/USD' },
+      { source: 'oanda', symbol: 'USD_CHF', display: 'USD/CHF' },
+      { source: 'oanda', symbol: 'EUR_GBP', display: 'EUR/GBP' },
+      { source: 'oanda', symbol: 'XAG_USD', display: 'XAG/USD (Silver)' },
+      { source: 'oanda', symbol: 'WTICO_USD', display: 'WTI Oil' },
+      { source: 'oanda', symbol: 'BCO_USD', display: 'Brent Oil' },
+      { source: 'binance', symbol: 'BTCUSDT', display: 'BTC/USDT' },
+      { source: 'binance', symbol: 'ETHUSDT', display: 'ETH/USDT' },
+      { source: 'binance', symbol: 'SOLUSDT', display: 'SOL/USDT' },
+      { source: 'coinbase', symbol: 'BTC-USD', display: 'BTC/USD' },
+      { source: 'bybit', symbol: 'BTCUSDT', display: 'BTC/USDT' },
+    ];
+    const remainingOnline = onlineDefaults.filter((d) => !offlineKeys.has(`${d.source}:${d.symbol}`));
+    if (remainingOnline.length) {
+      const og = document.createElement('optgroup');
+      og.label = '🌐 Online Fetch (Requires Internet / API Key)';
+      for (const d of remainingOnline) {
+        const opt = document.createElement('option');
+        opt.value = `${d.source}:${d.symbol}:${d.display}`;
+        opt.textContent = `🌐 ${d.source.toUpperCase()} · ${d.display}`;
+        og.appendChild(opt);
+      }
+      this.rpsInstrumentEl.appendChild(og);
+    }
+
+    if (prevValue && Array.from(this.rpsInstrumentEl.options).some((o) => o.value === prevValue)) {
+      this.rpsInstrumentEl.value = prevValue;
     }
   }
 
@@ -900,6 +990,9 @@ export class ReplayController {
       `;
 
       card.querySelector('.arc-older-btn')?.addEventListener('click', async (ev) => {
+        if (!this._confirmArchiveDownload({ source: e.source, display: e.display, actionLabel: 'Extend 6 months older (1m)' })) {
+          return;
+        }
         const btn = ev.currentTarget;
         btn.disabled = true;
         btn.textContent = 'Pulling...';
@@ -932,6 +1025,9 @@ export class ReplayController {
       });
 
       card.querySelector('.arc-sync-btn')?.addEventListener('click', async (ev) => {
+        if (!this._confirmArchiveDownload({ source: e.source, display: e.display, actionLabel: 'Update missing latest bars' })) {
+          return;
+        }
         const btn = ev.currentTarget;
         btn.disabled = true;
         btn.textContent = 'Syncing...';
@@ -989,13 +1085,17 @@ export class ReplayController {
 
   async _handleArchiveDownload(e) {
     e.preventDefault();
-    const source = this.arcSourceEl?.value || 'dukascopy';
+    const source = this.arcSourceEl?.value || 'oanda';
     const symbol = this.arcSymbolEl?.value || '';
     const display = this.arcSymbolEl?.selectedOptions?.[0]?.textContent || symbol;
     const fromMs = Date.parse(`${this.arcFromDayEl?.value || ''}T00:00:00Z`);
     const toMs = Date.parse(`${this.arcToDayEl?.value || ''}T23:59:00Z`);
     if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs >= toMs) {
       if (this.arcFeedbackEl) this.arcFeedbackEl.textContent = 'Please select a valid From / To date range.';
+      return;
+    }
+    const rangeLabel = `${this.arcFromDayEl?.value} → ${this.arcToDayEl?.value}`;
+    if (!this._confirmArchiveDownload({ source, display, actionLabel: rangeLabel })) {
       return;
     }
 

@@ -485,8 +485,7 @@
             <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <button type="button" class="mini-btn" id="rp-rename-session-btn" title="Rename active backtest session" aria-label="Rename session">✎</button>
-        <button type="button" class="mini-btn" id="rp-save-as-btn" title="Save named copy of current backtest session">💾 Save As</button>
+        <button type="button" class="mini-btn" id="rp-save-as-btn" title="Save or rename this backtest session locally inside LinePulse">💾 Save As</button>
         <span class="rp-clock-badge" id="rp-clock-display" title="Simulated replay timestamp">--</span>
       </div>
 
@@ -532,8 +531,7 @@
           <span>Eq:</span>
           <b id="rp-equity-val">$100,000</b>
         </div>
-        <button type="button" class="tool-btn" id="rp-archive-dock-btn" title="Offline Backtest Data Archive (Dukascopy Free 2003+, Databento CME, OANDA, Incremental Sync)">📦 Data</button>
-        <button type="button" class="tool-btn" id="rp-share-dock-btn" title="Export self-contained .linepulse.json backtest file for Mentor/Friends">📤 Share</button>
+        <button type="button" class="tool-btn" id="rp-share-dock-btn" title="Export a .linepulse.json file to send to a friend or mentor">📤 Export File</button>
         <button type="button" class="tool-btn" id="rp-analytics-btn" title="Open Backtest Analytics, Equity Curve, Journal &amp; Step-by-Step Review">📊 Stats</button>
       </div>
     </footer>
@@ -1045,29 +1043,9 @@
             <input type="text" id="rps-name" placeholder="e.g. XAUUSD London 2025" autocomplete="off">
           </div>
           <div class="field-row">
-            <label for="rps-instrument">Primary Pair <span class="label-hint">(1m back to 2015+)</span></label>
+            <label for="rps-instrument">Primary Pair <span class="label-hint">(📦 Offline Ready vs 🌐 Online)</span></label>
             <select id="rps-instrument">
               <option value="oanda:XAU_USD:XAU/USD">OANDA · XAU/USD (Gold)</option>
-              <option value="oanda:DXY:DXY">OANDA · DXY (US Dollar Index)</option>
-              <option value="oanda:EUR_USD:EUR/USD">OANDA · EUR/USD</option>
-              <option value="oanda:GBP_USD:GBP/USD">OANDA · GBP/USD</option>
-              <option value="oanda:NAS100_USD:NAS100">OANDA · NAS100</option>
-              <option value="oanda:SPX500_USD:SPX500">OANDA · SPX500</option>
-              <option value="oanda:USD_JPY:USD/JPY">OANDA · USD/JPY</option>
-              <option value="oanda:USD_CAD:USD/CAD">OANDA · USD/CAD</option>
-              <option value="oanda:AUD_USD:AUD/USD">OANDA · AUD/USD</option>
-              <option value="oanda:EUR_GBP:EUR/GBP">OANDA · EUR/GBP</option>
-              <option value="oanda:XAG_USD:XAG/USD">OANDA · XAG/USD (Silver)</option>
-              <option value="oanda:US30_USD:US30">OANDA · US30</option>
-              <option value="binance:BTCUSDT:BTC/USDT">Binance · BTC/USDT</option>
-              <option value="binance:ETHUSDT:ETH/USDT">Binance · ETH/USDT</option>
-              <option value="binance:SOLUSDT:SOL/USDT">Binance · SOL/USDT</option>
-              <option value="coinbase:BTC-USD:BTC/USD">Coinbase · BTC/USD</option>
-              <option value="bybit:BTCUSDT:BTC/USDT">Bybit · BTC/USDT</option>
-              <option value="dukascopy:XAUUSD:XAU/USD (Dukascopy)">Dukascopy (Free 2003+) · XAU/USD</option>
-              <option value="dukascopy:EURUSD:EUR/USD (Dukascopy)">Dukascopy (Free 2003+) · EUR/USD</option>
-              <option value="dukascopy:GBPUSD:GBP/USD (Dukascopy)">Dukascopy (Free 2003+) · GBP/USD</option>
-              <option value="dukascopy:DOLLARIDXUSD:DXY (Dukascopy)">Dukascopy (Free) · DXY</option>
             </select>
           </div>
         </div>

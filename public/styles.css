@@ -512,6 +512,15 @@ select:focus-visible {
   letter-spacing: -0.01em;
 }
 
+.brand-logo {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
 .brand-dot {
   width: 8px;
   height: 8px;
@@ -1217,6 +1226,7 @@ body.resizing-row * {
   min-height: 0;
   position: relative;
   width: 100%;
+  touch-action: none;
 }
 
 .pane-canvas-host.drawing-mode {
@@ -2408,17 +2418,29 @@ body.resizing-row * {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
-.wl-top {
+.wl-source-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wl-source-mini {
+  font-size: 8px !important;
+  line-height: 1.25 !important;
+  padding: 1px 4px !important;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  opacity: 0.9;
 }
 
 .wl-sym {
   font-weight: 700;
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.2;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2426,11 +2448,13 @@ body.resizing-row * {
 }
 
 .wl-name {
-  font-size: 10px;
+  font-size: 9.5px;
+  line-height: 1.2;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .wl-price-col {
@@ -2728,6 +2752,46 @@ dialog::backdrop {
 
 .symbol-row:hover {
   background: var(--bg-hover);
+}
+
+.symbol-row.is-added {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.symbol-row.is-current {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.symbol-row-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.symbol-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.symbol-status-badge.is-added {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.symbol-status-badge.is-current {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.45);
 }
 
 .symbol-row-left {
@@ -3117,7 +3181,7 @@ dialog::backdrop {
     display: none;
   }
 
-  .watchlist-panel {
+  body:not(.is-mobile-ui) .watchlist-panel {
     position: fixed;
     top: 40px;
     right: 0;
@@ -4030,6 +4094,177 @@ dialog::backdrop {
 }
 
 .pane-context-menu[hidden] {
+  display: none !important;
+}
+
+/* Mobile Bottom Navigation (hidden on desktop) */
+.mobile-bottom-nav {
+  display: none;
+}
+
+/* Mobile / Foldable Android (Honor Magic V5 outer + inner screens) TradingView-Style Layout */
+body.is-mobile-ui {
+  background: var(--bg-base, #0a0f1d);
+}
+
+body.is-mobile-ui .app-shell {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  height: 100dvh;
+  background: var(--bg-base, #0a0f1d);
+}
+
+body.is-mobile-ui .topbar {
+  height: auto;
+  min-height: 44px;
+  padding: 5px 8px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.is-mobile-ui .brand-name,
+body.is-mobile-ui .screen-badge,
+body.is-mobile-ui #sync-btn,
+body.is-mobile-ui #screens-btn,
+body.is-mobile-ui #mode-live-btn,
+body.is-mobile-ui #mode-replay-btn,
+body.is-mobile-ui #feed-status-btn .btn-label {
+  display: none !important;
+}
+
+body.is-mobile-ui .mobile-bottom-nav {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-strong);
+  padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
+  flex-shrink: 0;
+  z-index: 70;
+}
+
+.mob-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 46px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  touch-action: manipulation;
+}
+
+.mob-nav-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mob-nav-btn.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Mobile Watchlist Landing Tab (full-screen TradingView-style price list) */
+body.is-mobile-ui[data-mob-tab="watchlist"] .charts-grid,
+body.is-mobile-ui[data-mob-tab="watchlist"] .draw-toolbar,
+body.is-mobile-ui[data-mob-tab="watchlist"] .watchlist-resizer,
+body.is-mobile-ui[data-mob-tab="watchlist"] .replay-dock,
+body.is-mobile-ui[data-mob-tab="watchlist"] .rp-review-bar {
+  display: none !important;
+}
+
+body.is-mobile-ui[data-mob-tab="watchlist"] .watchlist-panel,
+body.is-mobile-ui[data-mob-tab="watchlist"] .watchlist-panel.collapsed {
+  display: flex !important;
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  inset: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  flex: 1 1 100% !important;
+  border-left: none !important;
+  box-shadow: none !important;
+  z-index: auto !important;
+}
+
+body.is-mobile-ui[data-mob-tab="watchlist"] .watchlist-item {
+  min-height: 52px;
+  padding: 8px 12px;
+}
+
+body.is-mobile-ui[data-mob-tab="watchlist"] .wl-sym {
+  font-size: 14.5px;
+}
+
+body.is-mobile-ui[data-mob-tab="watchlist"] .wl-price {
+  font-size: 14.5px;
+}
+
+/* Mobile Chart & Backtest Tabs: hide watchlist completely so chart fills 100% width */
+body.is-mobile-ui[data-mob-tab="chart"] .watchlist-panel,
+body.is-mobile-ui[data-mob-tab="backtest"] .watchlist-panel,
+body.is-mobile-ui[data-mob-tab="chart"] .watchlist-resizer,
+body.is-mobile-ui[data-mob-tab="backtest"] .watchlist-resizer {
+  display: none !important;
+}
+
+body.is-mobile-ui[data-mob-tab="chart"] .charts-grid,
+body.is-mobile-ui[data-mob-tab="backtest"] .charts-grid {
+  display: grid !important;
+  flex: 1 1 100% !important;
+  min-width: 0 !important;
+}
+
+body.is-mobile-ui .draw-toolbar {
+  width: 38px;
+  padding: 4px 2px;
+}
+
+/* On narrow folded outer phone screen (<=600px), enforce crisp single-chart view */
+@media (max-width: 600px) {
+  body.is-mobile-ui #layout-picker-btn {
+    display: none !important;
+  }
+
+  body.is-mobile-ui .charts-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr !important;
+  }
+
+  body.is-mobile-ui .charts-grid > .chart-pane:not(.active) {
+    display: none !important;
+  }
+}
+
+body.is-mobile-ui .replay-dock {
+  flex-wrap: wrap;
+  height: auto;
+  padding: 6px;
+  gap: 5px;
+}
+
+body.is-mobile-ui .rp-review-bar {
+  flex-wrap: wrap;
+  padding: 6px 8px;
+}
+
+/* Computer-only archive downloads: prevent accidental heavy/paid downloads on mobile */
+body.is-mobile-ui #archive-download-form,
+body.is-mobile-ui .arc-desktop-only,
+body.is-mobile-ui .arc-row-actions .arc-older-btn,
+body.is-mobile-ui .arc-row-actions .arc-update-btn {
   display: none !important;
 }
 

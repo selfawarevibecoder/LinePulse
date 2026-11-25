@@ -95,6 +95,40 @@ function recomputeAndConnect() {
     }
   });
 
+  eventSource.addEventListener('drawings_sync', (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      for (const port of Array.from(ports.keys())) {
+        try {
+          port.postMessage({
+            type: 'drawings_sync',
+            drawings: data.drawings || {},
+            symbolKey: data.symbolKey || null,
+          });
+        } catch {
+          ports.delete(port);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  });
+
+  eventSource.addEventListener('watchlist_sync', (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      for (const port of Array.from(ports.keys())) {
+        try {
+          port.postMessage({ type: 'watchlist_sync', watchlist: data });
+        } catch {
+          ports.delete(port);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  });
+
   eventSource.addEventListener('alert_triggered', (ev) => {
     try {
       const data = JSON.parse(ev.data);

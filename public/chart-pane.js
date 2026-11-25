@@ -680,10 +680,17 @@ export class ChartPane {
         mouseWheel: true,
         pressedMouseMove: true,
         horzTouchDrag: true,
-        vertTouchDrag: false,
+        vertTouchDrag: true,
       },
       handleScale: {
-        axisPressedMouseMove: true,
+        axisPressedMouseMove: {
+          time: true,
+          price: true,
+        },
+        axisDoubleClickReset: {
+          time: true,
+          price: true,
+        },
         mouseWheel: true,
         pinch: true,
       },
@@ -1304,7 +1311,7 @@ export class ChartPane {
         mouseWheel: true,
         pressedMouseMove: enabled,
         horzTouchDrag: enabled,
-        vertTouchDrag: false,
+        vertTouchDrag: enabled,
       },
     });
   }

@@ -2,9 +2,13 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
-  <title>LinePulse — Live OANDA &amp; CME Multi-Screen Charts</title>
+  <title>Velox Charts — Live OANDA &amp; CME Multi-Screen Charts</title>
+  <link rel="icon" type="image/png" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a0f1d">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -12,9 +16,10 @@
     <!-- Top Compact Toolbar (Zero Horizontal Scrollbar) -->
     <header class="topbar" role="banner">
       <div class="topbar-group topbar-left">
-        <div class="brand" title="LinePulse Multi-Screen Live Charts">
+        <div class="brand" title="Velox Charts — Multi-Screen Live Charts &amp; Replay">
+          <img class="brand-logo" src="/icon-192.png" alt="" width="20" height="20">
           <span class="brand-dot" id="global-live-dot" aria-hidden="true"></span>
-          <span class="brand-name">LinePulse</span>
+          <span class="brand-name">Velox Charts</span>
           <span class="screen-badge" id="screen-badge">1</span>
         </div>
 
@@ -511,7 +516,7 @@
             <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <button type="button" class="mini-btn" id="rp-save-as-btn" title="Save or rename this backtest session locally inside LinePulse">💾 Save As</button>
+        <button type="button" class="mini-btn" id="rp-save-as-btn" title="Save or rename this backtest session locally inside Velox Charts">💾 Save As</button>
         <span class="rp-clock-badge" id="rp-clock-display" title="Simulated replay timestamp">--</span>
       </div>
 
@@ -561,6 +566,26 @@
         <button type="button" class="tool-btn" id="rp-analytics-btn" title="Open Backtest Analytics, Equity Curve, Journal &amp; Step-by-Step Review">📊 Stats</button>
       </div>
     </footer>
+
+    <!-- Mobile Bottom Navigation Bar (TradingView-style: Watchlist / Chart / Backtest / Alerts — hidden on desktop) -->
+    <nav class="mobile-bottom-nav" id="mobile-bottom-nav" aria-label="Mobile navigation">
+      <button type="button" class="mob-nav-btn active" data-mob-tab="watchlist">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span id="mob-tab-watchlist">Watchlist</span>
+      </button>
+      <button type="button" class="mob-nav-btn" data-mob-tab="chart">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 15V9M9 15V5M13 15v-4M17 15V7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span id="mob-tab-chart">Chart</span>
+      </button>
+      <button type="button" class="mob-nav-btn" data-mob-tab="backtest">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M9.5 6L5 10l4.5 4V6zM15.5 6L11 10l4.5 4V6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <span id="mob-tab-backtest">Backtest</span>
+      </button>
+      <button type="button" class="mob-nav-btn" data-mob-tab="alerts">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.5a4.5 4.5 0 0 1 4.5 4.5v3l1.3 2H4.2l1.3-2V8A4.5 4.5 0 0 1 10 3.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8.4 15.2a1.7 1.7 0 0 0 3.2 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span id="mob-tab-alerts">Alerts</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Toast Notification Container -->
@@ -1273,13 +1298,14 @@
       </form>
 
       <section class="settings-section">
-        <h2>Import Full Data Pack (.zip) or CSV / JSON Files</h2>
+        <h2>Import Full Data Pack (.zip) or Export Delta Update (.zip)</h2>
         <div class="rps-add-pair-row">
           <input type="text" id="arc-import-symbol" placeholder="Symbol label (leave blank for .zip / .json.gz packs)" autocomplete="off">
-          <label class="btn-secondary rps-import-btn" title="Select a LinePulse-Full-Data-Pack.zip to import all pairs in 1 click, or pick CSV / JSON / .json.gz files">
+          <label class="btn-secondary rps-import-btn" title="Select a Full Data Pack or Delta Update .zip — safely merges missing bars without overwriting existing data">
             <span>📦 Import .ZIP Pack / Files</span>
             <input type="file" id="arc-import-file" accept=".zip,.csv,.txt,.json,.gz,.json.gz" multiple hidden>
           </label>
+          <a class="btn-secondary arc-desktop-only" id="arc-export-delta-btn" href="/api/archive/export-zip?days=14" download title="Export ONLY the last 14 days of bars into a compact shareable Delta .ZIP">📤 14d Delta ZIP</a>
         </div>
       </section>
 

@@ -16,6 +16,14 @@ import { deleteLayout, listLayouts, saveLayout } from './layouts.js';
 import { deleteTemplate, listTemplates, saveTemplate } from './templates.js';
 import { AlertManager } from './alerts.js';
 import { readDrawings, saveAllDrawings, saveSymbolDrawings } from './drawings.js';
+import { readWatchlist, saveWatchlistData } from './watchlist.js';
+import {
+  getPushStatus,
+  registerPushDevice,
+  unregisterPushDevice,
+  sendPushNotification,
+  sendAlertPushNotification,
+} from './push.js';
 import { fetchEconomicNews } from './news.js';
 import {
   deleteCustomPropRule,
@@ -29,9 +37,11 @@ import {
 import {
   DATABENTO_SPECS,
   DUKASCOPY_SPECS,
+  buildDeltaExportZip,
   deleteArchiveEntry,
   downloadToArchive,
   getArchiveDir,
+  getExportsDir,
   importCsvToArchive,
   importZipDataPackFile,
   listArchiveEntries,
@@ -108,7 +118,23 @@ alertManager.on('triggered', (event) => {
   for (const client of clients.values()) {
     sendSse(client.res, 'alert_triggered', event);
   }
+  // Fire instant native Android/mobile FCM push notification (<1s) when configured
+  sendAlertPushNotification(event).catch((err) => {
+    console.error('[FCM Push] Alert dispatch error:', err.message);
+  });
 });
+
+function broadcastDrawingsSync(drawings, symbolKey = null) {
+  for (const client of clients.values()) {
+    sendSse(client.res, 'drawings_sync', { drawings, symbolKey });
+  }
+}
+
+function broadcastWatchlistSync(watchlistData) {
+  for (const client of clients.values()) {
+    sendSse(client.res, 'watchlist_sync', watchlistData);
+  }
+}
 
 function sendSse(res, event, data) {
   try {
@@ -170,6 +196,9 @@ function sendJson(res, status, obj) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   });
   res.end(JSON.stringify(obj));
 }
@@ -213,6 +242,15 @@ function serveFile(res, filePath) {
 }
 
 const server = http.createServer(async (req, res) => {
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    });
+    res.end();
+    return;
+  }
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
 
@@ -336,6 +374,39 @@ const server = http.createServer(async (req, res) => {
         ...result,
         message: `Imported +${result.addedBars.toLocaleString()} bars (${result.entry.display}).`,
       });
+    }
+
+    if (pathname === '/api/archive/export-zip' && req.method === 'GET') {
+      const days = Number.parseInt(url.searchParams.get('days') || '14', 10);
+      const sinceSec = Number.isFinite(days) && days > 0 ? Math.floor(Date.now() / 1000) - days * 86400 : 0;
+      const result = buildDeltaExportZip({ sinceSec });
+      const dayStr = new Date().toISOString().slice(0, 10);
+      const fname = sinceSec > 0 ? `VeloxCharts-Delta-${days}d-${dayStr}.zip` : `VeloxCharts-Full-Pack-${dayStr}.zip`;
+      res.writeHead(200, {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${fname}"`,
+        'Content-Length': result.buffer.length,
+        'Cache-Control': 'no-store',
+      });
+      res.end(result.buffer);
+      return;
+    }
+
+    if (pathname.startsWith('/api/archive/exports/') && req.method === 'GET') {
+      const fname = path.basename(decodeURIComponent(pathname.slice('/api/archive/exports/'.length)));
+      const fullPath = path.join(getExportsDir(), fname);
+      if (!fname.endsWith('.zip') || !fs.existsSync(fullPath)) {
+        return sendJson(res, 404, { error: 'Export file not found.' });
+      }
+      const stat = fs.statSync(fullPath);
+      res.writeHead(200, {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${fname}"`,
+        'Content-Length': stat.size,
+        'Cache-Control': 'no-store',
+      });
+      fs.createReadStream(fullPath).pipe(res);
+      return;
     }
 
     if (pathname === '/api/archive' && req.method === 'DELETE') {
@@ -520,7 +591,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, removed ? 200 : 404, { ok: removed, alerts: alertManager.list() });
     }
 
-    // 5e. API: Persistent Drawings Store (persisted to data/drawings.json across restarts)
+    // 5e. API: Persistent Drawings Store (persisted to data/drawings.json & broadcast live to all connected devices!)
     if (pathname === '/api/drawings' && req.method === 'GET') {
       return sendJson(res, 200, { drawings: readDrawings() });
     }
@@ -529,13 +600,56 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req);
       if (typeof body.symbolKey === 'string' && Array.isArray(body.list)) {
         const all = saveSymbolDrawings(body.symbolKey, body.list);
+        broadcastDrawingsSync(all, body.symbolKey);
         return sendJson(res, 200, { ok: true, drawings: all });
       }
       if (body.drawings && typeof body.drawings === 'object') {
         const all = saveAllDrawings(body.drawings);
+        broadcastDrawingsSync(all, null);
         return sendJson(res, 200, { ok: true, drawings: all });
       }
       return sendJson(res, 400, { error: 'Invalid drawings payload' });
+    }
+
+    // 5f. API: Live Watchlist & Custom Categories Sync (persisted to data/watchlist.json & broadcast to all devices!)
+    if (pathname === '/api/watchlist' && req.method === 'GET') {
+      return sendJson(res, 200, { watchlist: readWatchlist() });
+    }
+
+    if (pathname === '/api/watchlist' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const saved = saveWatchlistData({
+        items: Array.isArray(body.items) ? body.items : undefined,
+        categories: Array.isArray(body.categories) ? body.categories : undefined,
+      });
+      broadcastWatchlistSync(saved);
+      return sendJson(res, 200, { ok: true, watchlist: saved });
+    }
+
+    // 5g. API: Native Mobile Push Registration (Firebase Cloud Messaging HTTP v1)
+    if (pathname === '/api/push/status' && req.method === 'GET') {
+      return sendJson(res, 200, getPushStatus());
+    }
+
+    if (pathname === '/api/push/register' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const device = registerPushDevice(body);
+      return sendJson(res, 200, { ok: true, device, status: getPushStatus() });
+    }
+
+    if (pathname === '/api/push/register' && req.method === 'DELETE') {
+      const body = await readJsonBody(req);
+      const removed = unregisterPushDevice(body.token);
+      return sendJson(res, 200, { ok: removed, status: getPushStatus() });
+    }
+
+    if (pathname === '/api/push/test' && req.method === 'POST') {
+      const result = await sendPushNotification({
+        title: '🔔 Velox Charts Test Alert',
+        body: 'Native push notifications are connected and ready!',
+        data: { type: 'test' },
+      });
+      return sendJson(res, 200, { ok: result.sent > 0, ...result });
     }
 
     // 6. API: Multiplexed Server-Sent Events live stream (OANDA + CME + Stocks + Binance/Coinbase/Bybit/Kraken)
@@ -636,17 +750,19 @@ export function startServer(options = {}) {
 
   const desiredPort =
     typeof options.port === 'number' ? options.port : Number(getConfig().PORT) || 3456;
+  const bindHost = options.host || process.env.HOST || '127.0.0.1';
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(desiredPort, '127.0.0.1', () => {
+    server.listen(desiredPort, bindHost, () => {
       server.off('error', reject);
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr ? addr.port : desiredPort;
-      console.log(`LinePulse Trader running at http://127.0.0.1:${actualPort}`);
+      const displayHost = bindHost === '0.0.0.0' ? '127.0.0.1' : bindHost;
+      console.log(`Velox Charts running at http://${displayHost}:${actualPort} (bind: ${bindHost})`);
       fetchOandaInstruments().catch(() => {});
       recomputeSubscriptions();
-      resolve({ server, port: actualPort, url: `http://127.0.0.1:${actualPort}` });
+      resolve({ server, port: actualPort, url: `http://${displayHost}:${actualPort}` });
     });
   });
 }

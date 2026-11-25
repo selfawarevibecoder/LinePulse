@@ -40,6 +40,7 @@ if (IS_PERSONAL) {
   const personalDataFiles = [
     'drawings.json',
     'alerts.json',
+    'watchlist.json',
     'layouts.json',
     'templates.json',
     'prop-rules.json',

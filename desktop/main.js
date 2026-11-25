@@ -27,7 +27,8 @@ function createChartWindow(targetUrl, options = {}) {
     minWidth: 640,
     minHeight: 420,
     backgroundColor: '#0b0e14',
-    title: 'LinePulse',
+    title: 'Velox Charts',
+    icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -142,13 +143,65 @@ function hydratePersonalSeed(targetDataDir) {
   }
 }
 
+function readRemoteServerUrl(userDataDir) {
+  if (process.env.VELOX_SERVER_URL) {
+    return String(process.env.VELOX_SERVER_URL).trim().replace(/\/+$/, '');
+  }
+  const candidates = [
+    path.join(userDataDir, 'remote-server.json'),
+    path.join(path.dirname(path.dirname(userDataDir)), 'linepulse-desktop', 'linepulse-data', 'remote-server.json'),
+  ];
+  for (const cfgPath of candidates) {
+    if (!fs.existsSync(cfgPath)) continue;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      if (parsed && parsed.enabled !== false && typeof parsed.url === 'string' && parsed.url.trim()) {
+        return parsed.url.trim().replace(/\/+$/, '');
+      }
+    } catch {
+      // ignore malformed remote config
+    }
+  }
+  return null;
+}
+
+async function isRemoteServerReachable(baseUrl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const resp = await fetch(`${baseUrl}/api/config`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function bootDesktop() {
+  const userDataDir = path.join(app.getPath('userData'), 'linepulse-data');
+  const remoteUrl = !IS_PERSONAL_DEV ? readRemoteServerUrl(userDataDir) : null;
+
+  if (remoteUrl) {
+    const reachable = await isRemoteServerReachable(remoteUrl);
+    if (reachable) {
+      // Connect Mac Desktop directly to your private 24/7 Oracle Cloud + Tailscale Velox Charts server!
+      serverUrl = remoteUrl;
+      buildAppMenu();
+      createChartWindow(`${serverUrl}/?screen=1`);
+      return;
+    }
+    console.warn(`[Velox Charts] Remote server unreachable (${remoteUrl}) — falling back to built-in local server.`);
+  }
+
   const entryPath = resolveServerEntry();
   const { startServer } = await import(pathToFileURL(entryPath).href);
 
   // Use a stable localhost port so Electron localStorage persists across restarts (falls back to random port if busy)
   const preferredPort = IS_PERSONAL_DEV ? 3458 : 3460;
-  const userDataDir = path.join(app.getPath('userData'), 'linepulse-data');
   if (!IS_PERSONAL_DEV) {
     hydratePersonalSeed(userDataDir);
   }

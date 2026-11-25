@@ -9,10 +9,13 @@ desktop/seed-archive/
 desktop/seed-archive-full/
 desktop/seed-personal/
 desktop/app-bundle/
+mobile-android/
+oracle-deploy/
 
 # Build outputs & packaged binaries
 dist/
 dist-desktop/
+*.apk
 *.dmg
 *.dmg.blockmap
 *.exe

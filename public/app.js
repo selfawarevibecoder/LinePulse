@@ -600,8 +600,23 @@ function loadWatchlist() {
   }
 }
 
-function saveWatchlist() {
+let watchlistSyncTimer = null;
+
+function pushWatchlistToServer() {
+  if (watchlistSyncTimer) clearTimeout(watchlistSyncTimer);
+  watchlistSyncTimer = setTimeout(() => {
+    watchlistSyncTimer = null;
+    fetch('/api/watchlist', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: watchlist, categories: watchlistCategories }),
+    }).catch(() => {});
+  }, 180);
+}
+
+function saveWatchlist({ skipServer = false } = {}) {
   localStorage.setItem('linepulse_watchlist_v1', JSON.stringify(watchlist));
+  if (!skipServer) pushWatchlistToServer();
 }
 
 function loadWatchlistCategories() {
@@ -614,8 +629,44 @@ function loadWatchlistCategories() {
   }
 }
 
-function saveWatchlistCategories() {
+function saveWatchlistCategories({ skipServer = false } = {}) {
   localStorage.setItem('linepulse_wl_cats_v1', JSON.stringify(watchlistCategories));
+  if (!skipServer) pushWatchlistToServer();
+}
+
+function applyRemoteWatchlistSync(data) {
+  if (!data || typeof data !== 'object') return;
+  let changed = false;
+  if (Array.isArray(data.items) && data.items.length > 0) {
+    watchlist = data.items;
+    saveWatchlist({ skipServer: true });
+    changed = true;
+  }
+  if (Array.isArray(data.categories)) {
+    watchlistCategories = data.categories;
+    saveWatchlistCategories({ skipServer: true });
+    changed = true;
+  }
+  if (changed) {
+    renderWatchlist();
+    updateStreamSubscription();
+  }
+}
+
+async function hydrateWatchlistFromServer() {
+  try {
+    const res = await fetch('/api/watchlist');
+    const data = await res.json();
+    const remote = data?.watchlist;
+    if (remote && (Array.isArray(remote.items) || Array.isArray(remote.categories))) {
+      applyRemoteWatchlistSync(remote);
+    } else if (watchlist.length > 0) {
+      // Seed server with local watchlist on first connect
+      pushWatchlistToServer();
+    }
+  } catch {
+    // ignore
+  }
 }
 
 function loadDrawingsStore() {
@@ -1352,7 +1403,7 @@ function renderGrid() {
   }
 
   if (isPopout && visibleDefs[0]) {
-    document.title = `${visibleDefs[0].display} — LinePulse`;
+    document.title = `${visibleDefs[0].display} — Velox Charts`;
   }
 
   renderGridSplitters();
@@ -2641,6 +2692,10 @@ function initSharedWorker() {
         renderFeedStatus(msg.status);
       } else if (msg.type === 'alerts_sync' && Array.isArray(msg.alerts)) {
         syncAlertsState(msg.alerts);
+      } else if (msg.type === 'drawings_sync' && msg.drawings) {
+        applyRemoteDrawingsSync(msg.drawings, msg.symbolKey || null);
+      } else if (msg.type === 'watchlist_sync' && msg.watchlist) {
+        applyRemoteWatchlistSync(msg.watchlist);
       } else if (msg.type === 'alert_triggered' && msg.event) {
         handleAlertTriggered(msg.event, Boolean(msg.isPrimary));
       }
@@ -2724,6 +2779,22 @@ function updateStreamSubscription() {
     try {
       const data = JSON.parse(ev.data);
       if (Array.isArray(data.alerts)) syncAlertsState(data.alerts);
+    } catch {
+      // ignore
+    }
+  });
+  fallbackEventSource.addEventListener('drawings_sync', (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.drawings) applyRemoteDrawingsSync(data.drawings, data.symbolKey || null);
+    } catch {
+      // ignore
+    }
+  });
+  fallbackEventSource.addEventListener('watchlist_sync', (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data) applyRemoteWatchlistSync(data);
     } catch {
       // ignore
     }
@@ -2836,6 +2907,25 @@ function syncAlertsState(list) {
   if (alertsDialog.open) {
     renderAlertsList();
   }
+}
+
+function applyRemoteDrawingsSync(allDrawings, symbolKey = null) {
+  if (replayCtrl?.active) return;
+  if (!allDrawings || typeof allDrawings !== 'object') return;
+  drawingsBySymbol = allDrawings;
+  try {
+    localStorage.setItem('linepulse_drawings_v1', JSON.stringify(drawingsBySymbol));
+  } catch {
+    // ignore storage quota
+  }
+  for (const pane of panes.values()) {
+    if (!symbolKey || pane.symbolKey === symbolKey) {
+      if (!pane.dragInfo && !pane.draftDrawing) {
+        pane.setDrawings(drawingsBySymbol[pane.symbolKey] || []);
+      }
+    }
+  }
+  renderLayersPanel();
 }
 
 async function fetchAlertsFromServer() {
@@ -3131,6 +3221,11 @@ function selectWatchlistItem(item) {
   const key = `${item.source}:${item.symbol}`;
   const rowEl = watchlistListEl.querySelector(`[data-wkey="${CSS.escape(key)}"]`);
   rowEl?.scrollIntoView({ block: 'nearest' });
+
+  // On Mobile (TradingView-style Watchlist landing): tapping a symbol opens the full-screen Chart tab!
+  if (document.body.classList.contains('is-mobile-ui')) {
+    setMobileTab('chart');
+  }
 }
 
 function stepWatchlistSelection(delta) {
@@ -3232,11 +3327,11 @@ function renderWatchlist() {
     row.innerHTML = `
       <span class="wl-drag-grip" title="Drag up/down to reorder" aria-hidden="true">⋮⋮</span>
       <div class="wl-meta">
-        <div class="wl-top">
-          <span class="source-pill ${item.source}">${item.source.toUpperCase()}</span>
-          <span class="wl-sym">${escapeHtml(item.display)}</span>
+        <div class="wl-source-row">
+          <span class="source-pill wl-source-mini ${item.source}">${escapeHtml(item.exchange || item.source.toUpperCase())}</span>
+          <span class="wl-name">${escapeHtml(item.name || item.symbol)}</span>
         </div>
-        <span class="wl-name">${escapeHtml(item.name || item.symbol)}</span>
+        <div class="wl-sym">${escapeHtml(item.display)}</div>
       </div>
       <div class="wl-price-col">
         <div class="wl-price">${priceText}</div>
@@ -3626,16 +3721,34 @@ function renderSymbolResults(items) {
     return;
   }
 
+  const isTr = getLang() === 'tr';
+  const visibleWl = getVisibleWatchlistItems();
+  const inVisibleWl = new Set(visibleWl.map((w) => `${w.source}:${w.symbol}`));
+  const inMainWl = new Set(watchlist.map((w) => `${w.source}:${w.symbol}`));
+  const targetPane = panes.get(symbolDialogTargetPaneId || activePaneId);
+  const activeKey = targetPane ? `${targetPane.state.source}:${targetPane.state.symbol}` : '';
+
   for (const item of items) {
+    const key = `${item.source}:${item.symbol}`;
+    const alreadyInList = inVisibleWl.has(key) || (symbolDialogMode !== 'watchlist' && inMainWl.has(key));
+    const isCurrentPane = symbolDialogMode !== 'watchlist' && key === activeKey;
+
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'symbol-row';
+    btn.className = `symbol-row${alreadyInList ? ' is-added' : ''}${isCurrentPane ? ' is-current' : ''}`;
+    const statusBadge = isCurrentPane
+      ? `<span class="symbol-status-badge is-current">${isTr ? '● Açık' : '● Open'}</span>`
+      : alreadyInList
+        ? `<span class="symbol-status-badge is-added">${isTr ? '✓ Ekli' : '✓ Added'}</span>`
+        : '';
+
     btn.innerHTML = `
       <span class="symbol-row-left">
         <span class="symbol-row-code">${escapeHtml(item.display)}</span>
         <span class="symbol-row-desc">${escapeHtml(item.name)}</span>
       </span>
       <span class="symbol-row-right">
+        ${statusBadge}
         <span class="source-pill ${item.source}">${escapeHtml(item.exchange)}</span>
       </span>
     `;
@@ -3674,7 +3787,7 @@ function handleSymbolChosen(item) {
       target.setDrawings(drawingsBySymbol[target.symbolKey] || []);
       target.setAlerts(alertsList);
       if (isPopout) {
-        document.title = `${item.display || item.symbol} — LinePulse`;
+        document.title = `${item.display || item.symbol} — Velox Charts`;
       }
       saveScreenState();
       updateTopbarFromActive();
@@ -3974,6 +4087,10 @@ syncCrosshairBtn.addEventListener('click', () => {
 openNextScreenBtn?.addEventListener('click', openNewScreenWindow);
 
 watchlistToggleBtn.addEventListener('click', () => {
+  if (document.body.classList.contains('is-mobile-ui')) {
+    setMobileTab(activeMobileTab === 'watchlist' ? 'chart' : 'watchlist');
+    return;
+  }
   screenState.watchlistOpen = !screenState.watchlistOpen;
   saveScreenState();
   renderWatchlist();
@@ -4152,6 +4269,7 @@ async function boot() {
   renderGrid();
   renderLayersPanel();
   hydrateDrawingsFromServer();
+  hydrateWatchlistFromServer();
   fetchAlertsFromServer();
   fetchEconomicNewsFromServer();
   setInterval(fetchEconomicNewsFromServer, 10 * 60 * 1000);
@@ -4170,6 +4288,162 @@ async function boot() {
     setLang(ev.target.value);
     renderNewsPanel();
     showToast(t('lang.switchedTitle'), t('lang.switchedBody'));
+  });
+  // Wire Mobile Bottom Navigation (TradingView-style: Watchlist landing -> Chart -> Backtest -> Alerts)
+  initMobileNavigation();
+  // Wire Native Android Firebase FCM Push Notifications (when running inside Velox Charts APK)
+  initCapacitorNativePush();
+}
+
+async function initCapacitorNativePush() {
+  const cap = window.Capacitor;
+  if (!cap) return;
+  try {
+    const SB = cap.Plugins?.StatusBar;
+    if (SB) {
+      SB.setOverlaysWebView?.({ overlay: false }).catch?.(() => {});
+      SB.setBackgroundColor?.({ color: '#0a0f1d' }).catch?.(() => {});
+    }
+  } catch {}
+
+  const Push = cap.Plugins?.PushNotifications;
+  if (!Push) return;
+  try {
+    await Push.createChannel?.({
+      id: 'velox_alerts',
+      name: 'Velox Price Alerts',
+      description: 'Instant price crossing alerts from Velox Charts',
+      importance: 5,
+      sound: 'default',
+      vibration: true,
+    });
+    let perm = await Push.checkPermissions();
+    if (perm.receive !== 'granted') {
+      perm = await Push.requestPermissions();
+    }
+    if (perm.receive !== 'granted') return;
+
+    await Push.removeAllListeners?.();
+    await Push.addListener('registration', (tokenObj) => {
+      if (!tokenObj?.value) return;
+      fetch('/api/push/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: tokenObj.value,
+          platform: 'android',
+          name: 'Velox Android',
+        }),
+      }).catch(() => {});
+    });
+
+    await Push.addListener('pushNotificationReceived', (notif) => {
+      if (notif?.title) {
+        showToast(notif.title, notif.body || '');
+      }
+    });
+
+    await Push.addListener('pushNotificationActionPerformed', (action) => {
+      const d = action?.notification?.data || {};
+      if (d.source && d.symbol) {
+        selectWatchlistItem({
+          source: d.source,
+          symbol: d.symbol,
+          display: d.display || d.symbol,
+        });
+      }
+    });
+
+    await Push.register();
+  } catch (err) {
+    console.warn('[Velox Push] Init skipped:', err);
+  }
+}
+
+let activeMobileTab = 'watchlist';
+
+function detectMobileUi() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || window.innerWidth <= 840;
+}
+
+function setMobileTab(tab) {
+  const nextTab = tab || 'watchlist';
+  const nav = document.getElementById('mobile-bottom-nav');
+
+  if (nextTab === 'alerts') {
+    const prevTab = activeMobileTab || (replayCtrl?.active ? 'backtest' : 'watchlist');
+    if (nav) {
+      for (const btn of nav.querySelectorAll('.mob-nav-btn')) {
+        btn.classList.toggle('active', btn.dataset.mobTab === 'alerts');
+      }
+    }
+    openAlertsDialog();
+    const restoreHighlight = () => {
+      if (nav) {
+        for (const btn of nav.querySelectorAll('.mob-nav-btn')) {
+          btn.classList.toggle('active', btn.dataset.mobTab === prevTab);
+        }
+      }
+    };
+    alertsDialog?.addEventListener('close', restoreHighlight, { once: true });
+    return;
+  }
+
+  activeMobileTab = nextTab;
+  document.body.dataset.mobTab = activeMobileTab;
+  if (nav) {
+    for (const btn of nav.querySelectorAll('.mob-nav-btn')) {
+      btn.classList.toggle('active', btn.dataset.mobTab === activeMobileTab);
+    }
+  }
+
+  if (activeMobileTab === 'watchlist') {
+    if (replayCtrl?.active) replayCtrl.exitReplay();
+    setSidebarMode('watchlist');
+    screenState.watchlistOpen = true;
+    watchlistPanel.classList.remove('collapsed');
+    watchlistToggleBtn?.setAttribute('aria-pressed', 'true');
+  } else if (activeMobileTab === 'chart') {
+    if (replayCtrl?.active) replayCtrl.exitReplay();
+    screenState.watchlistOpen = false;
+    watchlistPanel.classList.add('collapsed');
+    watchlistToggleBtn?.setAttribute('aria-pressed', 'false');
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        for (const pane of panes.values()) pane.chart?.timeScale()?.scrollToRealTime?.();
+      }, 80);
+    });
+  } else if (activeMobileTab === 'backtest') {
+    screenState.watchlistOpen = false;
+    watchlistPanel.classList.add('collapsed');
+    watchlistToggleBtn?.setAttribute('aria-pressed', 'false');
+    if (!replayCtrl?.active) {
+      replayCtrl?.enterReplay();
+    } else {
+      replayCtrl?.openSessionDialog();
+    }
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+}
+
+function initMobileNavigation() {
+  const applyMode = () => {
+    const isMob = detectMobileUi();
+    document.body.classList.toggle('is-mobile-ui', isMob);
+    if (isMob && !document.body.dataset.mobTab) {
+      setMobileTab('watchlist');
+    }
+  };
+  applyMode();
+  window.addEventListener('resize', applyMode);
+
+  const nav = document.getElementById('mobile-bottom-nav');
+  nav?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.mob-nav-btn');
+    if (!btn) return;
+    setMobileTab(btn.dataset.mobTab);
   });
 }
 

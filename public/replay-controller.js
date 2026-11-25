@@ -1149,7 +1149,13 @@ export class ReplayController {
       if (Array.isArray(data.entries)) this.archiveEntries = data.entries;
       this._syncArchiveEntriesToPrimarySelect();
       this._renderArchiveEntries();
-      if (this.arcFeedbackEl) this.arcFeedbackEl.textContent = data.message || 'Downloaded!';
+      if (this.arcFeedbackEl) {
+        if (data.deltaZipName) {
+          this.arcFeedbackEl.innerHTML = `${escapeHtml(data.message || 'Downloaded!')} <a href="/api/archive/exports/${encodeURIComponent(data.deltaZipName)}" download style="color:var(--accent);text-decoration:underline;margin-left:6px;">📦 Download Delta ZIP</a>`;
+        } else {
+          this.arcFeedbackEl.textContent = data.message || 'Downloaded!';
+        }
+      }
     } catch (err) {
       if (this.arcFeedbackEl) this.arcFeedbackEl.textContent = err.message;
     } finally {

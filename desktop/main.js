@@ -82,7 +82,7 @@ function buildAppMenu() {
           accelerator: 'CmdOrCtrl+N',
           click: () => {
             if (!serverUrl) return;
-            screenCounter = (screenCounter % 8) + 1;
+            screenCounter += 1;
             createChartWindow(`${serverUrl}/?screen=${screenCounter}`);
           },
         },

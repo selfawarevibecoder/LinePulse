@@ -1041,6 +1041,151 @@ export function importCsvToArchive({ source = 'custom', symbol, display, csvText
 }
 
 // ============================================================================
+// 5b. Pure-JS Streaming .ZIP Data Pack Importer (Cross-Platform, Low RAM!)
+// ============================================================================
+export function importZipDataPackFile(zipFilePath) {
+  const stat = fs.statSync(zipFilePath);
+  const fileSize = stat.size;
+  if (fileSize < 22) throw new Error('Invalid or empty .zip file.');
+
+  const fd = fs.openSync(zipFilePath, 'r');
+  try {
+    // 1. Locate End of Central Directory (EOCD: 0x06054b50) within last 65KB
+    const tailLen = Math.min(fileSize, 65557);
+    const tailBuf = Buffer.alloc(tailLen);
+    fs.readSync(fd, tailBuf, 0, tailLen, fileSize - tailLen);
+
+    let eocdPos = -1;
+    for (let i = tailLen - 22; i >= 0; i--) {
+      if (tailBuf.readUInt32LE(i) === 0x06054b50) {
+        eocdPos = i;
+        break;
+      }
+    }
+    if (eocdPos < 0) throw new Error('Not a valid ZIP archive (EOCD header not found).');
+
+    const totalEntries = tailBuf.readUInt16LE(eocdPos + 10);
+    const cdSize = tailBuf.readUInt32LE(eocdPos + 12);
+    const cdOffset = tailBuf.readUInt32LE(eocdPos + 16);
+
+    const cdBuf = Buffer.alloc(cdSize);
+    fs.readSync(fd, cdBuf, 0, cdSize, cdOffset);
+
+    const targetDir = getArchiveDir();
+    const indexFile = getIndexFile();
+    const existing = readIndex();
+    const byKey = new Map(existing.map((e) => [e.key, e]));
+
+    let importedFiles = 0;
+    const touchedKeys = new Set();
+    let pos = 0;
+
+    for (let idx = 0; idx < totalEntries && pos + 46 <= cdBuf.length; idx++) {
+      if (cdBuf.readUInt32LE(pos) !== 0x02014b50) break;
+      const method = cdBuf.readUInt16LE(pos + 10);
+      const compSize = cdBuf.readUInt32LE(pos + 20);
+      const nameLen = cdBuf.readUInt16LE(pos + 28);
+      const extraLen = cdBuf.readUInt16LE(pos + 30);
+      const commentLen = cdBuf.readUInt16LE(pos + 32);
+      const localHeaderOffset = cdBuf.readUInt32LE(pos + 42);
+      const rawName = cdBuf.subarray(pos + 46, pos + 46 + nameLen).toString('utf8');
+      pos += 46 + nameLen + extraLen + commentLen;
+
+      if (rawName.endsWith('/') || rawName.includes('__MACOSX/')) continue;
+      const baseName = path.basename(rawName);
+      if (baseName.startsWith('.') || baseName === 'index.json') continue;
+      const isGz = baseName.endsWith('.json.gz');
+      const isJson = baseName.endsWith('.json');
+      if (!isGz && !isJson) continue;
+
+      // Read 30-byte local file header to find exact data offset
+      const lh = Buffer.alloc(30);
+      fs.readSync(fd, lh, 0, 30, localHeaderOffset);
+      const lhNameLen = lh.readUInt16LE(26);
+      const lhExtraLen = lh.readUInt16LE(28);
+      const dataOffset = localHeaderOffset + 30 + lhNameLen + lhExtraLen;
+
+      const compBuf = Buffer.alloc(compSize);
+      fs.readSync(fd, compBuf, 0, compSize, dataOffset);
+
+      let entryBuf;
+      if (method === 0) {
+        entryBuf = compBuf;
+      } else if (method === 8) {
+        entryBuf = zlib.inflateRawSync(compBuf);
+      } else {
+        continue;
+      }
+
+      const jsonBuf = isGz ? zlib.gunzipSync(entryBuf) : entryBuf;
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonBuf.toString('utf8'));
+      } catch {
+        continue;
+      }
+      if (!parsed || !parsed.source || !parsed.symbol || !Array.isArray(parsed.bars)) continue;
+
+      const src = String(parsed.source).toLowerCase();
+      const sym = String(parsed.symbol);
+      const isH1 = parsed.resolution === '1h' || baseName.includes('__1h.json');
+      const outFile = isH1 ? getArchiveHtf1hFile(src, sym) : getArchiveDataFile(src, sym);
+      fs.writeFileSync(outFile, jsonBuf);
+
+      const key = `${src}:${sym}`;
+      HTF_ROLLUP_CACHE.delete(key);
+      const cur = byKey.get(key) || {
+        key,
+        source: src,
+        symbol: sym,
+        display: parsed.display || sym,
+        precision: parsed.precision ?? 2,
+        firstTime: null,
+        lastTime: null,
+        barCount: 0,
+        htf1hFirstTime: null,
+        htf1hLastTime: null,
+        htf1hBarCount: 0,
+        effectiveFirstTime: null,
+        updatedAt: Date.now(),
+      };
+      const bars = parsed.bars;
+      if (isH1) {
+        cur.htf1hFirstTime = bars.length ? bars[0].time : null;
+        cur.htf1hLastTime = bars.length ? bars[bars.length - 1].time : null;
+        cur.htf1hBarCount = bars.length;
+      } else {
+        cur.firstTime = bars.length ? bars[0].time : null;
+        cur.lastTime = bars.length ? bars[bars.length - 1].time : null;
+        cur.barCount = bars.length;
+        if (parsed.display) cur.display = parsed.display;
+        if (Number.isFinite(parsed.precision)) cur.precision = parsed.precision;
+      }
+      cur.effectiveFirstTime = computeEffectiveFirstTime(cur.firstTime, cur.htf1hFirstTime);
+      cur.updatedAt = Date.now();
+      byKey.set(key, cur);
+      touchedKeys.add(key);
+      importedFiles += 1;
+    }
+
+    if (importedFiles === 0) {
+      throw new Error('No LinePulse archive (.json / .json.gz) files were found inside this .zip.');
+    }
+
+    const entries = Array.from(byKey.values());
+    fs.writeFileSync(indexFile, JSON.stringify({ entries }, null, 2), 'utf8');
+    return {
+      importedFiles,
+      instrumentCount: touchedKeys.size,
+      entries: listArchiveEntries(),
+      message: `Imported ${touchedKeys.size} instruments (${importedFiles} archive files) from ZIP Data Pack!`,
+    };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// ============================================================================
 // 6. Fast Offline Hybrid (1h + 1m) Archive Slice Reader (Used by Replay FIRST!)
 // ============================================================================
 function getCachedStitched1h(src, symbol, rawM1, rawH1) {

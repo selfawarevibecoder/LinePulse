@@ -1039,9 +1039,29 @@ export class ReplayController {
     const files = Array.from(this.arcImportFileEl?.files || []);
     if (!files.length) return;
     let importedCount = 0;
+    let lastMsg = '';
     try {
       for (let idx = 0; idx < files.length; idx++) {
         const file = files[idx];
+        const isZip = /\.zip$/i.test(file.name);
+        if (isZip) {
+          if (this.arcFeedbackEl) {
+            const mb = (file.size / 1048576).toFixed(1);
+            this.arcFeedbackEl.textContent = `Importing ${file.name} (${mb} MB)... Extracting all pairs, please wait...`;
+          }
+          const res = await fetch('/api/archive/import-zip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: file,
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(`${file.name}: ${data.error || 'ZIP import failed'}`);
+          if (Array.isArray(data.entries)) this.archiveEntries = data.entries;
+          importedCount += Number(data.importedFiles || 1);
+          lastMsg = data.message || `Imported ${file.name}!`;
+          continue;
+        }
+
         const isGz = /\.gz$/i.test(file.name);
         const symLabel =
           (files.length === 1 ? this.arcImportSymbolEl?.value.trim() : '') ||
@@ -1081,7 +1101,8 @@ export class ReplayController {
       this._renderArchiveEntries();
       if (this.arcImportSymbolEl) this.arcImportSymbolEl.value = '';
       if (this.arcFeedbackEl) {
-        this.arcFeedbackEl.textContent = `Imported ${importedCount} file${importedCount === 1 ? '' : 's'} into offline archive!`;
+        this.arcFeedbackEl.textContent =
+          lastMsg || `Imported ${importedCount} file${importedCount === 1 ? '' : 's'} into offline archive!`;
       }
     } catch (err) {
       if (this.arcFeedbackEl) this.arcFeedbackEl.textContent = err.message;

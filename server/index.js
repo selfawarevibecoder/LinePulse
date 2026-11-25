@@ -31,7 +31,9 @@ import {
   DUKASCOPY_SPECS,
   deleteArchiveEntry,
   downloadToArchive,
+  getArchiveDir,
   importCsvToArchive,
+  importZipDataPackFile,
   listArchiveEntries,
 } from './archive.js';
 
@@ -297,6 +299,27 @@ const server = http.createServer(async (req, res) => {
         extendDays: body.extendDays,
       });
       return sendJson(res, 200, { ok: true, ...result });
+    }
+
+    if (pathname === '/api/archive/import-zip' && req.method === 'POST') {
+      const tmpZip = path.join(getArchiveDir(), `_upload_${Date.now()}.zip`);
+      try {
+        await new Promise((resolve, reject) => {
+          const ws = fs.createWriteStream(tmpZip);
+          req.on('error', reject);
+          ws.on('error', reject);
+          ws.on('finish', resolve);
+          req.pipe(ws);
+        });
+        const result = importZipDataPackFile(tmpZip);
+        return sendJson(res, 200, { ok: true, ...result });
+      } finally {
+        try {
+          if (fs.existsSync(tmpZip)) fs.unlinkSync(tmpZip);
+        } catch {
+          // ignore
+        }
+      }
     }
 
     if (pathname === '/api/archive/import' && req.method === 'POST') {

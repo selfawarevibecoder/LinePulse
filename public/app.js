@@ -2130,6 +2130,7 @@ const replayCtrl = new ReplayController({
   showToast: (t, b) => showToast(t, b),
   openTextPrompt: (title, def, hint, placeholder) => openTextPrompt(title, def, hint, placeholder),
   setSidebarMode: (m) => setSidebarMode(m),
+  onReplayNewsUpdate: () => renderNewsPanel(),
   onEnterReplay: () => {
     livePanesBackup = Array.from(panes.entries()).map(([id, inst]) => ({
       id,
@@ -2167,6 +2168,7 @@ const replayCtrl = new ReplayController({
     updateTopbarFromActive();
     updateStreamSubscription();
     renderLayersPanel();
+    renderNewsPanel();
   },
 });
 
@@ -2185,20 +2187,46 @@ const COUNTRY_FLAGS = {
   CNY: '🇨🇳',
 };
 
+function getNewsContext() {
+  const inReplay = Boolean(replayCtrl?.active && Number.isFinite(replayCtrl?.session?.cursorTime));
+  const nowSec = inReplay ? replayCtrl.session.cursorTime : Math.floor(Date.now() / 1000);
+  const sourceEvents = inReplay ? replayCtrl.replayNewsEvents || [] : newsEvents;
+  return { inReplay, nowSec, sourceEvents };
+}
+
 function getFilteredNewsEvents() {
-  return newsEvents.filter((ev) => {
+  const { inReplay, nowSec, sourceEvents } = getNewsContext();
+  return sourceEvents.filter((ev) => {
     if (newsRegion === 'us_eu' && ev.country !== 'USD' && ev.country !== 'EUR') return false;
-    if (newsRedOnly) return ev.impact === 'High';
-    return ev.impact === 'High' || ev.impact === 'Medium';
+    if (newsRedOnly && ev.impact !== 'High') return false;
+    if (!newsRedOnly && ev.impact !== 'High' && ev.impact !== 'Medium') return false;
+    if (inReplay) {
+      if (newsRange === '1d') {
+        // Show events on the same simulated UTC day (plus 6h lookahead into next open)
+        const dayStart = Math.floor(nowSec / 86400) * 86400;
+        return ev.time >= dayStart && ev.time <= dayStart + 86400 + 6 * 3600;
+      }
+      if (newsRange === 'this_week') {
+        const dow = (new Date(nowSec * 1000).getUTCDay() + 6) % 7;
+        const mon = Math.floor(nowSec / 86400) * 86400 - dow * 86400;
+        return ev.time >= mon && ev.time <= mon + 7 * 86400;
+      }
+      if (newsRange === '1w') {
+        return ev.time >= nowSec - 7 * 86400 && ev.time <= nowSec + 3 * 86400;
+      }
+    }
+    return true;
   });
 }
 
 function getChartNewsEvents() {
-  // Keep chart clean: never flood chart with very old news (show max last 36h + upcoming for current ranges,
-  // or full selected history if user intentionally chose 1W / This Month)
+  const { inReplay, nowSec } = getNewsContext();
   const items = getFilteredNewsEvents();
+  if (inReplay) {
+    return items.filter((ev) => ev.time >= nowSec - 7 * 86400 && ev.time <= nowSec + 7 * 86400);
+  }
   if (newsRange === '1d' || newsRange === 'this_week') {
-    const cutoff = Math.floor(Date.now() / 1000) - 36 * 3600;
+    const cutoff = nowSec - 36 * 3600;
     return items.filter((ev) => ev.time >= cutoff);
   }
   return items;
@@ -2207,7 +2235,9 @@ function getChartNewsEvents() {
 function pushNewsToCharts() {
   const show = prefs.showNewsOnChart !== false;
   const chartEvents = show ? getChartNewsEvents() : [];
+  const { inReplay, nowSec } = getNewsContext();
   for (const pane of panes.values()) {
+    if (inReplay) pane.setReplayClock(nowSec);
     pane.setNewsEvents(chartEvents);
   }
 }
@@ -2228,22 +2258,28 @@ function formatNewsDateTime(unixSec, tz) {
   }
 }
 
-function formatNewsCountdown(unixSec) {
-  const diffSec = unixSec - Math.floor(Date.now() / 1000);
-  if (diffSec < -60) return 'Released';
-  if (diffSec <= 60) return 'LIVE NOW';
+function formatNewsCountdown(unixSec, refNowSec = Math.floor(Date.now() / 1000)) {
+  const diffSec = unixSec - refNowSec;
+  const isTr = getLang() === 'tr';
+  if (diffSec < -60) return isTr ? 'Açıklandı' : 'Released';
+  if (diffSec <= 60) return isTr ? 'ŞİMDİ' : 'LIVE NOW';
   const mins = Math.floor(diffSec / 60);
-  if (mins < 60) return `in ${mins}m`;
+  if (mins < 60) return isTr ? `${mins}dk sonra` : `in ${mins}m`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `in ${hrs}h ${mins % 60}m`;
+  if (hrs < 24) return isTr ? `${hrs}s ${mins % 60}dk` : `in ${hrs}h ${mins % 60}m`;
   const days = Math.floor(hrs / 24);
-  return `in ${days}d ${hrs % 24}h`;
+  return isTr ? `${days}g ${hrs % 24}s` : `in ${days}d ${hrs % 24}h`;
 }
 
 function renderNewsPanel() {
-  const nowSec = Math.floor(Date.now() / 1000);
-  const upcomingRedUsEu = newsEvents.filter(
-    (e) => (e.country === 'USD' || e.country === 'EUR') && e.impact === 'High' && e.time >= nowSec - 300
+  const { inReplay, nowSec, sourceEvents } = getNewsContext();
+  const isTr = getLang() === 'tr';
+  const upcomingRedUsEu = sourceEvents.filter(
+    (e) =>
+      (e.country === 'USD' || e.country === 'EUR') &&
+      e.impact === 'High' &&
+      e.time >= nowSec - 300 &&
+      (!inReplay || e.time <= nowSec + 7 * 86400)
   ).length;
   if (newsCountPill) {
     newsCountPill.textContent = String(upcomingRedUsEu);
@@ -2266,26 +2302,46 @@ function renderNewsPanel() {
   const items = getFilteredNewsEvents();
   newsListEl.innerHTML = '';
 
+  if (inReplay) {
+    const dayStr = new Date(nowSec * 1000).toISOString().slice(0, 10);
+    const banner = document.createElement('div');
+    banner.style.cssText =
+      'padding:6px 8px;margin-bottom:6px;border-radius:6px;background:rgba(139,92,246,0.16);border:1px solid rgba(139,92,246,0.35);color:#c4b5fd;font-size:11px;font-weight:600;text-align:center;';
+    banner.textContent = isTr
+      ? `📅 Replay Takvimi (${dayStr}) · Gelecek sonuçlar gizli`
+      : `📅 Replay Calendar (${dayStr}) · Future actuals hidden`;
+    newsListEl.appendChild(banner);
+  }
+
   if (items.length === 0) {
-    newsListEl.innerHTML =
-      '<div style="padding:18px 10px;text-align:center;color:var(--text-secondary);font-size:12px;">No matching events this week. Try turning off <b>🔴 Red</b> to also see Medium-impact USD/EUR news.</div>';
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:18px 10px;text-align:center;color:var(--text-secondary);font-size:12px;';
+    empty.innerHTML = isTr
+      ? 'Bu aralıkta eşleşen haber yok. Orta etkili haberleri görmek için <b>🔴 Red</b> filtresini kapatabilir veya <b>This Wk</b> seçebilirsiniz.'
+      : 'No matching events in this window. Try turning off <b>🔴 Red</b> or switching to <b>This Wk</b>.';
+    newsListEl.appendChild(empty);
     return;
   }
 
   for (const ev of items) {
     const isPast = ev.time < nowSec - 60;
+    const isFutureInReplay = inReplay && ev.time > nowSec;
     const isMed = ev.impact !== 'High';
     const card = document.createElement('div');
     card.className = `news-card ${isMed ? 'impact-medium' : 'impact-high'} ${isPast ? 'is-past' : ''}`;
     const flag = COUNTRY_FLAGS[ev.country] || '🌐';
     const timeStr = formatNewsDateTime(ev.time, prefs.timezone);
-    const cdStr = formatNewsCountdown(ev.time);
+    const cdStr = formatNewsCountdown(ev.time, nowSec);
 
     let actualCls = '';
-    if (ev.actualNum !== null && ev.forecastNum !== null) {
+    if (!isFutureInReplay && ev.actualNum !== null && ev.forecastNum !== null) {
       actualCls = ev.actualNum > ev.forecastNum ? 'beat' : ev.actualNum < ev.forecastNum ? 'miss' : '';
     }
-    const actualTxt = ev.actual || (isPast ? '—' : 'Pending');
+    const actualTxt = isFutureInReplay
+      ? isTr
+        ? 'Bekleniyor'
+        : 'Pending'
+      : ev.actual || (isPast ? '—' : isTr ? 'Bekleniyor' : 'Pending');
 
     card.innerHTML = `
       <div class="news-card-top">
@@ -2298,9 +2354,9 @@ function renderNewsPanel() {
       <div class="news-title">${escapeHtml(ev.title)}</div>
       <div class="news-time-label">${escapeHtml(timeStr)}${ev.period ? ` · ${escapeHtml(ev.period)}` : ''}</div>
       <div class="news-metrics">
-        <div><span>Actual</span><b class="${actualCls}">${escapeHtml(actualTxt)}</b></div>
-        <div><span>Forecast</span><b>${escapeHtml(ev.forecast || '—')}</b></div>
-        <div><span>Previous</span><b>${escapeHtml(ev.previous || '—')}</b></div>
+        <div><span>${isTr ? 'Açıklanan' : 'Actual'}</span><b class="${actualCls}">${escapeHtml(actualTxt)}</b></div>
+        <div><span>${isTr ? 'Beklenti' : 'Forecast'}</span><b>${escapeHtml(ev.forecast || '—')}</b></div>
+        <div><span>${isTr ? 'Önceki' : 'Previous'}</span><b>${escapeHtml(ev.previous || '—')}</b></div>
       </div>
     `;
 
@@ -2313,6 +2369,10 @@ function renderNewsPanel() {
 }
 
 async function fetchEconomicNewsFromServer() {
+  if (replayCtrl?.active) {
+    renderNewsPanel();
+    return;
+  }
   try {
     const qs = new URLSearchParams({ range: newsRange, region: newsRegion });
     const res = await fetch(`/api/news?${qs.toString()}`);
@@ -4095,10 +4155,12 @@ async function boot() {
   document.getElementById('lang-toggle-btn')?.addEventListener('click', () => {
     const next = getLang() === 'tr' ? 'en' : 'tr';
     setLang(next);
+    renderNewsPanel();
     showToast(t('lang.switchedTitle'), t('lang.switchedBody'));
   });
   document.getElementById('cfg-lang')?.addEventListener('change', (ev) => {
     setLang(ev.target.value);
+    renderNewsPanel();
     showToast(t('lang.switchedTitle'), t('lang.switchedBody'));
   });
 }

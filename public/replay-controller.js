@@ -1635,26 +1635,32 @@ export class ReplayController {
   async _loadHistoricalReplayNews(centerSec) {
     if (Array.isArray(this.session?.embeddedNews) && this.session.embeddedNews.length > 0) {
       this.replayNewsEvents = this.session.embeddedNews;
+      this.replayNewsWindow = [centerSec - 14 * 86400, centerSec + 14 * 86400];
       for (const pane of this.host.getPanes().values()) {
         pane.setReplayClock(this.session?.cursorTime);
-        pane.setNewsEvents(this.replayNewsEvents);
+        pane.setNewsEvents(this.replayNewsEvents.filter((e) => e.impact === 'High'));
       }
+      this.host.onReplayNewsUpdate?.();
       return;
     }
+    if (this.fetchingReplayNews) return;
+    this.fetchingReplayNews = true;
     try {
-      const from = centerSec - 3 * 86400;
-      const to = centerSec + 10 * 86400;
-      const res = await fetch(`/api/news?from=${from}&to=${to}&region=us_eu`);
+      const from = centerSec - 7 * 86400;
+      const to = centerSec + 14 * 86400;
+      const res = await fetch(`/api/news?from=${from}&to=${to}&region=all`);
       const data = await res.json();
-      this.replayNewsEvents = Array.isArray(data.events)
-        ? data.events.filter((e) => e.impact === 'High')
-        : [];
+      this.replayNewsEvents = Array.isArray(data.events) ? data.events : [];
+      this.replayNewsWindow = [from, to];
       for (const pane of this.host.getPanes().values()) {
         pane.setReplayClock(this.session?.cursorTime);
-        pane.setNewsEvents(this.replayNewsEvents);
       }
+      this.host.onReplayNewsUpdate?.();
     } catch {
       this.replayNewsEvents = [];
+      this.host.onReplayNewsUpdate?.();
+    } finally {
+      this.fetchingReplayNews = false;
     }
   }
 
@@ -2569,6 +2575,17 @@ export class ReplayController {
     // Dock clock & equity
     if (this.rpClockEl) {
       this.rpClockEl.textContent = fmtReplayTime(this.session.cursorTime, prefs.timezone);
+    }
+    // Keep Historical Economic Calendar synced to simulated Replay date (auto-prefetch new weeks!)
+    const curT = this.session.cursorTime;
+    if (Number.isFinite(curT)) {
+      const win = this.replayNewsWindow;
+      if (!win || curT < win[0] + 86400 || curT > win[1] - 2 * 86400) {
+        this._loadHistoricalReplayNews(curT);
+      } else if (this._lastNewsRenderClock !== curT) {
+        this._lastNewsRenderClock = curT;
+        this.host.onReplayNewsUpdate?.();
+      }
     }
     if (this.rpEquityValEl) {
       this.rpEquityValEl.textContent = fmtUsd(stats.equity);

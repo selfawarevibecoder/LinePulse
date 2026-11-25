@@ -20,6 +20,9 @@ dist-desktop/
 *.zip
 *.gz
 
+# Internal planning docs (keep local only)
+ROADMAP.md
+
 # Dependencies & OS files
 node_modules/
 desktop/node_modules/

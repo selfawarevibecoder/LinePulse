@@ -703,7 +703,7 @@ export async function fetchDatabentoChunk(symbol, fromSec, toSec, schema = 'ohlc
 }
 
 async function fetchDatabentoRange(symbol, fromSec, toSec, schema = 'ohlcv-1m') {
-  const maxChunkSec = schema === 'ohlcv-1h' ? 5 * 365 * 86400 : 365 * 86400;
+  const maxChunkSec = schema === 'ohlcv-1h' ? 5 * 365 * 86400 : 90 * 86400;
   const all = [];
   let cursor = fromSec;
   while (cursor < toSec) {

@@ -49,38 +49,14 @@ TWELVEDATA_API_KEY=
 `;
 fs.writeFileSync(path.join(STAGE_DIR, '.env.example'), envExample, 'utf8');
 
-// 1-click macOS / Linux launcher (double-click in Finder -> starts server & opens browser!)
-const macLauncher = `#!/bin/bash
-cd "$(dirname "$0")"
-PORT=\${PORT:-3456}
-echo "Starting LinePulse Local Web Server on http://127.0.0.1:$PORT ..."
-if ! command -v node >/dev/null 2>&1; then
-  echo "ERROR: Node.js 18+ is required. Download from https://nodejs.org"
-  read -p "Press Enter to close..."
-  exit 1
-fi
-(sleep 1.2 && open "http://127.0.0.1:$PORT" >/dev/null 2>&1 || true) &
-node server/index.js
-`;
+// 1-click macOS / Linux launcher (auto-installs Node.js with user permission if missing!)
+const macLauncher = fs.readFileSync(path.join(ROOT, 'Baslat-Mac.command'), 'utf8');
 const macPath = path.join(STAGE_DIR, 'Start-LinePulse-Mac.command');
 fs.writeFileSync(macPath, macLauncher, 'utf8');
 fs.chmodSync(macPath, 0o755);
 
-// 1-click Windows launcher (double-click -> starts server & opens browser!)
-const winLauncher = `@echo off
-cd /d "%~dp0"
-set PORT=3456
-where node >nul 2>&1
-if errorlevel 1 (
-  echo ERROR: Node.js 18+ is required. Download from https://nodejs.org
-  pause
-  exit /b 1
-)
-echo Starting LinePulse Local Web Server on http://127.0.0.1:%PORT% ...
-start "" /b cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:%PORT%"
-node server/index.js
-pause
-`;
+// 1-click Windows launcher (auto-installs Node.js LTS via winget with user permission if missing!)
+const winLauncher = fs.readFileSync(path.join(ROOT, 'Baslat-Windows.bat'), 'utf8');
 fs.writeFileSync(path.join(STAGE_DIR, 'Start-LinePulse-Windows.bat'), winLauncher, 'utf8');
 
 // Clear quick-start README

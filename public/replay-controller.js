@@ -145,6 +145,7 @@ export class ReplayController {
       this._syncArchiveEntriesToPrimarySelect();
       this._renderArchiveEntries();
       this._renderSavedSessionsList();
+      this._syncReviewBar();
     });
   }
 
@@ -259,6 +260,37 @@ export class ReplayController {
     this.rpExportPackBtn = document.getElementById('rp-export-pack-btn');
     this.rpExportCsvBtn = document.getElementById('rp-export-csv-btn');
     this.rpExportJsonBtn = document.getElementById('rp-export-json-btn');
+
+    // Floating On-Screen Mentor Step-by-Step Review Bar
+    this.rpReviewBarEl = document.getElementById('rp-review-bar');
+    this.rpRevBadgeEl = document.getElementById('rp-rev-badge');
+    this.rpRevCounterEl = document.getElementById('rp-rev-counter');
+    this.rpRevDescEl = document.getElementById('rp-rev-desc');
+    this.rpRevCommentEl = document.getElementById('rp-rev-comment');
+    this.rpRevPrevBtn = document.getElementById('rp-rev-prev-btn');
+    this.rpRevPlayBtn = document.getElementById('rp-rev-play-btn');
+    this.rpRevNextBtn = document.getElementById('rp-rev-next-btn');
+    this.rpRevSpeedEl = document.getElementById('rp-rev-speed');
+    this.rpRevCommentBtn = document.getElementById('rp-rev-comment-btn');
+    this.rpRevAllBtn = document.getElementById('rp-rev-all-btn');
+
+    this.rpRevPrevBtn?.addEventListener('click', () => {
+      this._stopReviewStepsPlay();
+      this.stepReviewTimeline(-1);
+    });
+    this.rpRevPlayBtn?.addEventListener('click', () => this.toggleReviewStepsPlay());
+    this.rpRevNextBtn?.addEventListener('click', () => {
+      this._stopReviewStepsPlay();
+      this.stepReviewTimeline(1);
+    });
+    this.rpRevSpeedEl?.addEventListener('change', () => {
+      if (this.reviewPlayTimer) {
+        this._stopReviewStepsPlay();
+        this._startReviewStepsTimer();
+      }
+    });
+    this.rpRevCommentBtn?.addEventListener('click', () => this.promptActiveReviewComment());
+    this.rpRevAllBtn?.addEventListener('click', () => this.showAllReviewOverview());
 
     // Mode toggle events
     this.modeLiveBtn?.addEventListener('click', () => this.exitReplay());
@@ -377,6 +409,31 @@ export class ReplayController {
 
   handleKeyDown(e) {
     if (!this.active || this.isDialogOpen()) return false;
+    // When Mentor Review Mode is active, keyboard controls step/pause/exit review directly!
+    if (this.activeReviewStepIdx >= 0) {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        this.toggleReviewStepsPlay();
+        return true;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        this._stopReviewStepsPlay();
+        this.stepReviewTimeline(1);
+        return true;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        this._stopReviewStepsPlay();
+        this.stepReviewTimeline(-1);
+        return true;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.showAllReviewOverview();
+        return true;
+      }
+    }
     if (e.code === 'Space') {
       e.preventDefault();
       this.togglePlay();
@@ -423,6 +480,10 @@ export class ReplayController {
   exitReplay() {
     if (!this.active) return;
     this.pause();
+    this._stopReviewStepsPlay();
+    this.activeReviewStepIdx = -1;
+    this.reviewTimeFilter = null;
+    this._syncReviewBar();
     this.saveSessionSoon(true);
     this.active = false;
     this.modeLiveBtn?.classList.add('active');
@@ -1437,6 +1498,7 @@ export class ReplayController {
     this.reviewTimeFilter = null;
     this.activeReviewStepIdx = -1;
     this._stopReviewStepsPlay();
+    this._syncReviewBar();
 
     if (this.rpSessionNameEl) this.rpSessionNameEl.textContent = this.session.name;
     this.paneContexts.clear();
@@ -2170,7 +2232,7 @@ export class ReplayController {
         'order_pending',
         `${p.side.toUpperCase()} ${p.orderType.toUpperCase()} ${p.lots.toFixed(2)}`,
         `Pending @ ${p.entryPrice}${p.sl ? ` · SL ${p.sl}` : ''}${p.tp ? ` · TP ${p.tp}` : ''}`,
-        { side: p.side, price: p.entryPrice, lots: p.lots }
+        { side: p.side, orderType: p.orderType, price: p.entryPrice, lots: p.lots, sl: p.sl, tp: p.tp }
       );
       this.host.showToast(
         `${p.side.toUpperCase()} ${p.orderType.toUpperCase()} Placed`,
@@ -2294,7 +2356,7 @@ export class ReplayController {
         'order_pending',
         `${side.toUpperCase()} ${finalType.toUpperCase()} ${lots.toFixed(2)}`,
         `Pending @ ${entryPrice.toFixed(spec.precision)}${sl !== null ? ` · SL ${sl.toFixed(spec.precision)}` : ''}${tp !== null ? ` · TP ${tp.toFixed(spec.precision)}` : ''}`,
-        { side, price: entryPrice, lots }
+        { side, orderType: finalType, price: entryPrice, lots, sl, tp }
       );
       this.host.showToast(
         t('pos.placedLimitTitle', { side: side.toUpperCase(), type: finalType.toUpperCase() }),
@@ -2305,6 +2367,23 @@ export class ReplayController {
           tp: tp !== null ? tp.toFixed(spec.precision) : '—',
         })
       );
+    }
+
+    // Preserve a snapshot of the Long/Short Position tool on its timeline step so Mentor Review can replay it accurately!
+    const toolSnap = {
+      ...drawing,
+      p1: drawing.p1 ? { ...drawing.p1 } : null,
+      p2: drawing.p2 ? { ...drawing.p2 } : null,
+    };
+    if (Array.isArray(this.session.timeline)) {
+      for (let i = this.session.timeline.length - 1; i >= 0; i--) {
+        const st = this.session.timeline[i];
+        if (st.type === 'drawing_add' && st.drawingId === drawing.id) {
+          st.toolSnapshot = toolSnap;
+          st.symbolKey = pane?.symbolKey || `${this.session.source}:${this.session.symbol}`;
+          break;
+        }
+      }
     }
 
     // Auto-remove the Long/Short tool box so ONLY the clean FXReplay horizontal Entry / SL / TP lines stay on the chart!
@@ -2407,6 +2486,8 @@ export class ReplayController {
       lots: closeLots,
       entryPrice: pos.entryPrice,
       exitPrice,
+      sl: Number.isFinite(pos.sl) ? pos.sl : null,
+      tp: Number.isFinite(pos.tp) ? pos.tp : null,
       entryTime: pos.entryTime,
       exitTime: this.session.cursorTime,
       grossPnl: Number(grossPnl.toFixed(2)),
@@ -2422,7 +2503,16 @@ export class ReplayController {
       'trade_close',
       `${trade.reason}: ${pos.side.toUpperCase()} ${closeLots.toFixed(2)}`,
       `${pos.entryPrice} → ${exitPrice} · ${fmtUsd(netPnl, true)}${trade.rMultiple !== null ? ` (${trade.rMultiple >= 0 ? '+' : ''}${trade.rMultiple}R)` : ''}`,
-      { side: pos.side, price: exitPrice, pnl: trade.pnl, rMultiple: trade.rMultiple }
+      {
+        side: pos.side,
+        entryPrice: pos.entryPrice,
+        price: exitPrice,
+        lots: closeLots,
+        sl: Number.isFinite(pos.sl) ? pos.sl : null,
+        tp: Number.isFinite(pos.tp) ? pos.tp : null,
+        pnl: trade.pnl,
+        rMultiple: trade.rMultiple,
+      }
     );
 
     if (remainingLots >= 0.01 && fraction < 1) {
@@ -2505,7 +2595,14 @@ export class ReplayController {
           'order_fill',
           `Pending ${ord.side.toUpperCase()} ${ord.orderType.toUpperCase()} Triggered`,
           `${ord.lots.toFixed(2)} lots @ ${ord.price}${ord.sl ? ` · SL ${ord.sl}` : ''}${ord.tp ? ` · TP ${ord.tp}` : ''}`,
-          { side: ord.side, price: ord.price, lots: ord.lots }
+          {
+            side: ord.side,
+            orderType: ord.orderType,
+            price: ord.price,
+            lots: ord.lots,
+            sl: Number.isFinite(ord.sl) ? ord.sl : null,
+            tp: Number.isFinite(ord.tp) ? ord.tp : null,
+          }
         );
         this.host.showToast(
           `⚡ ${ord.side.toUpperCase()} ${ord.orderType.toUpperCase()} Filled`,
@@ -2644,11 +2741,172 @@ export class ReplayController {
   // ==========================================================================
   // UI Sync: Dock, Prop Guard, Trade Sidebar, Chart Overlays & Isolated Drawings
   // ==========================================================================
+  _parseStepLevels(step) {
+    if (!step) return { sl: null, tp: null, orderType: 'limit' };
+    const detail = String(step.detail || '');
+    let sl = Number.isFinite(Number(step.sl)) ? Number(step.sl) : null;
+    let tp = Number.isFinite(Number(step.tp)) ? Number(step.tp) : null;
+    if (sl === null) {
+      const m = detail.match(/\bSL\s+(-?[\d.]+)/i);
+      if (m) {
+        const v = Number.parseFloat(m[1]);
+        if (Number.isFinite(v)) sl = v;
+      }
+    }
+    if (tp === null) {
+      const m = detail.match(/\bTP\s+(-?[\d.]+)/i);
+      if (m) {
+        const v = Number.parseFloat(m[1]);
+        if (Number.isFinite(v)) tp = v;
+      }
+    }
+    const orderType =
+      step.orderType ||
+      (/\bSTOP\b/i.test(step.label || '') ? 'stop' : 'limit');
+    return { sl, tp, orderType };
+  }
+
+  _reconstructReviewState() {
+    const steps = Array.isArray(this.session?.timeline) ? this.session.timeline : [];
+    const maxIdx = Math.min(this.activeReviewStepIdx, steps.length - 1);
+    const activePending = [];
+    const activeOpen = [];
+    let justClosedSnapshot = null;
+
+    for (let i = 0; i <= maxIdx; i++) {
+      const st = steps[i];
+      if (!st) continue;
+      const { sl, tp, orderType } = this._parseStepLevels(st);
+
+      if (st.type === 'order_pending' && Number.isFinite(Number(st.price))) {
+        activePending.push({
+          id: `rev-ord-${st.id || i}`,
+          symbol: this.session.symbol,
+          display: this.session.display,
+          side: st.side === 'sell' ? 'sell' : 'buy',
+          orderType,
+          lots: Number(st.lots) || 1,
+          price: Number(st.price),
+          createdAt: st.time,
+          sl,
+          tp,
+        });
+      } else if (st.type === 'order_fill' && Number.isFinite(Number(st.price))) {
+        const side = st.side === 'sell' ? 'sell' : 'buy';
+        const price = Number(st.price);
+        let inheritedSl = sl;
+        let inheritedTp = tp;
+        // Pop matching pending order if this fill triggered a pending limit/stop
+        const pIdx = activePending.findIndex(
+          (o) => o.side === side && Math.abs(o.price - price) < Math.max(1e-5, Math.abs(price) * 1e-4)
+        );
+        if (pIdx !== -1) {
+          const [matched] = activePending.splice(pIdx, 1);
+          if (inheritedSl === null) inheritedSl = matched.sl;
+          if (inheritedTp === null) inheritedTp = matched.tp;
+        }
+        activeOpen.push({
+          id: `rev-pos-${st.id || i}`,
+          symbol: this.session.symbol,
+          display: this.session.display,
+          side,
+          lots: Number(st.lots) || 1,
+          entryPrice: price,
+          entryTime: st.time,
+          sl: inheritedSl,
+          tp: inheritedTp,
+        });
+      } else if (st.type === 'breakeven') {
+        const side = st.side === 'sell' ? 'sell' : 'buy';
+        const pos = [...activeOpen].reverse().find((p) => p.side === side);
+        if (pos) pos.sl = pos.entryPrice;
+      } else if (st.type === 'trade_close') {
+        const side = st.side === 'sell' ? 'sell' : 'buy';
+        const oIdx = activeOpen.findIndex((p) => p.side === side);
+        if (oIdx !== -1) {
+          const [closedPos] = activeOpen.splice(oIdx, 1);
+          if (i === maxIdx) {
+            justClosedSnapshot = {
+              ...closedPos,
+              sl: sl !== null ? sl : closedPos.sl,
+              tp: tp !== null ? tp : closedPos.tp,
+            };
+          }
+        }
+      }
+    }
+
+    return { activePending, activeOpen, justClosedSnapshot };
+  }
+
+  _getVisibleReviewTrades() {
+    if (!this.session) return { closed: [], openAtStep: [] };
+    const allTrades = Array.isArray(this.session.trades) ? this.session.trades : [];
+    const cutoff = this.reviewTimeFilter;
+    if (!Number.isFinite(cutoff) || this.activeReviewStepIdx < 0) {
+      return { closed: allTrades, openAtStep: [] };
+    }
+    const steps = Array.isArray(this.session.timeline) ? this.session.timeline : [];
+    let closedAtCutoffAllowed = 0;
+    for (let i = 0; i <= this.activeReviewStepIdx && i < steps.length; i++) {
+      if (steps[i].type === 'trade_close' && steps[i].time === cutoff) {
+        closedAtCutoffAllowed++;
+      }
+    }
+    const closed = [];
+    let closedAtCutoffUsed = 0;
+    for (const tr of allTrades) {
+      if (tr.entryTime > cutoff) continue;
+      const isClosedBefore = Number.isFinite(tr.exitTime) && tr.exitTime < cutoff;
+      const isClosedNow =
+        Number.isFinite(tr.exitTime) &&
+        tr.exitTime === cutoff &&
+        closedAtCutoffUsed < closedAtCutoffAllowed;
+      if (isClosedBefore || isClosedNow) {
+        if (isClosedNow) closedAtCutoffUsed++;
+        closed.push(tr);
+      }
+    }
+    return { closed, openAtStep: [] };
+  }
+
   _pushOverlaysToPane(pane) {
     if (!this.session || pane.state.symbol !== this.session.symbol) {
       pane.setReplayOverlays({});
       return;
     }
+    const cutoff = this.reviewTimeFilter;
+    const isReview = Number.isFinite(cutoff) && this.activeReviewStepIdx >= 0;
+
+    if (isReview) {
+      const { closed } = this._getVisibleReviewTrades();
+      const { activePending, activeOpen, justClosedSnapshot } = this._reconstructReviewState();
+
+      // Show every active open position WITH its exact Entry + SL + TP lines & $USD tags!
+      // On the exact closing step, also keep that trade's Entry/SL/TP reference lines visible so the mentor sees where SL & TP were!
+      const rawPositions = justClosedSnapshot ? [...activeOpen, justClosedSnapshot] : activeOpen;
+      const positions = rawPositions.map((pos) => ({
+        ...pos,
+        ...this.computePositionPnl(pos),
+      }));
+
+      // Show every active pending Limit/Stop order WITH its exact Entry + SL + TP lines & $USD tags!
+      const orders = activePending.map((ord) => {
+        const spec = getInstrumentSpec(this.session.symbol, ord.price, this.session.source);
+        const slUsd = Number.isFinite(ord.sl)
+          ? (Math.abs(ord.price - ord.sl) / spec.pipSize) * spec.pipValuePerLot * ord.lots
+          : null;
+        const tpUsd = Number.isFinite(ord.tp)
+          ? (Math.abs(ord.tp - ord.price) / spec.pipSize) * spec.pipValuePerLot * ord.lots
+          : null;
+        const rr = slUsd && tpUsd ? tpUsd / slUsd : null;
+        return { ...ord, slUsd, tpUsd, rr };
+      });
+
+      pane.setReplayOverlays({ positions, orders, markers: closed });
+      return;
+    }
+
     const positions = this.session.positions.map((pos) => ({
       ...pos,
       ...this.computePositionPnl(pos),
@@ -2674,13 +2932,75 @@ export class ReplayController {
   _syncSessionDrawingsToPanes() {
     if (!this.session) return;
     const cutoff = this.reviewTimeFilter;
+    const isReview = Number.isFinite(cutoff) && this.activeReviewStepIdx >= 0;
+
+    let drawingStepMap = null;
+    let ephemeralTool = null;
+    let ephemeralSymKey = `${this.session.source}:${this.session.symbol}`;
+    if (isReview) {
+      drawingStepMap = new Map();
+      const steps = Array.isArray(this.session.timeline) ? this.session.timeline : [];
+      steps.forEach((st, idx) => {
+        if (st.type === 'drawing_add' && st.drawingId && !drawingStepMap.has(st.drawingId)) {
+          drawingStepMap.set(st.drawingId, idx);
+        }
+      });
+
+      // If currently stopped on a "Drew Long/Short Position" step whose tool was later auto-deleted upon placing the order,
+      // replay the exact Long/Short Position tool box (from saved snapshot OR reconstructed from the next order step)!
+      const curStep = steps[this.activeReviewStepIdx];
+      if (curStep?.type === 'drawing_add') {
+        if (curStep.toolSnapshot) {
+          ephemeralTool = curStep.toolSnapshot;
+          if (curStep.symbolKey) ephemeralSymKey = curStep.symbolKey;
+        } else if (/Long Position|Short Position/i.test(curStep.label || '')) {
+          const isShort = /Short Position/i.test(curStep.label || '');
+          // Look ahead 1-2 steps for the corresponding order placement to get exact Entry / SL / TP!
+          const nextOrd = steps
+            .slice(this.activeReviewStepIdx + 1, this.activeReviewStepIdx + 3)
+            .find((s) => s.type === 'order_pending' || s.type === 'order_fill');
+          if (nextOrd && Number.isFinite(Number(nextOrd.price))) {
+            const { sl, tp } = this._parseStepLevels(nextOrd);
+            if (sl !== null && tp !== null) {
+              ephemeralTool = {
+                id: curStep.drawingId || `rev-tool-${curStep.id}`,
+                type: isShort ? 'shortpos' : 'longpos',
+                p1: { time: curStep.time, price: Number(nextOrd.price) },
+                p2: { time: curStep.time + 60 * 24, price: Number(nextOrd.price) },
+                sl,
+                tp,
+                accountSize: this.session.initialBalance || 100000,
+                riskPct: 1,
+                color: isShort ? '#ef5350' : '#26a69a',
+                hidden: false,
+                text: '',
+              };
+            }
+          }
+        }
+      }
+    }
+
     for (const pane of this.host.getPanes().values()) {
       const rawList = this.session.drawings?.[pane.symbolKey] || [];
-      const list =
-        Number.isFinite(cutoff)
-          ? rawList.filter((d) => !Number.isFinite(d.createdAtReplayTime) || d.createdAtReplayTime <= cutoff)
-          : rawList;
-      pane.setDrawings(list);
+      const list = isReview
+        ? rawList.filter((d) => {
+            if (drawingStepMap && drawingStepMap.has(d.id)) {
+              return drawingStepMap.get(d.id) <= this.activeReviewStepIdx;
+            }
+            return !Number.isFinite(d.createdAtReplayTime) || d.createdAtReplayTime <= cutoff;
+          })
+        : rawList;
+      if (
+        isReview &&
+        ephemeralTool &&
+        pane.symbolKey === ephemeralSymKey &&
+        !list.some((d) => d.id === ephemeralTool.id)
+      ) {
+        pane.setDrawings([...list, ephemeralTool]);
+      } else {
+        pane.setDrawings(list);
+      }
     }
   }
 
@@ -2840,7 +3160,11 @@ export class ReplayController {
   _renderRecentTrades() {
     if (!this.rpRecentListEl || !this.session) return;
     this.rpRecentListEl.innerHTML = '';
-    const recent = [...this.session.trades].reverse().slice(0, 8);
+    const sourceTrades =
+      this.activeReviewStepIdx >= 0 && Number.isFinite(this.reviewTimeFilter)
+        ? this._getVisibleReviewTrades().closed
+        : this.session.trades;
+    const recent = [...sourceTrades].reverse().slice(0, 8);
     if (!recent.length) {
       this.rpRecentListEl.innerHTML =
         '<div style="padding:10px 6px;text-align:center;color:var(--text-secondary);font-size:11px;">Closed trades appear here.</div>';
@@ -3031,6 +3355,68 @@ export class ReplayController {
     });
   }
 
+  _syncReviewBar(isComplete = false) {
+    if (!this.rpReviewBarEl) return;
+    const steps = this.session?.timeline || [];
+    if (!this.active || !this.session || this.activeReviewStepIdx < 0 || !steps.length) {
+      this.rpReviewBarEl.hidden = true;
+      return;
+    }
+    const idx = Math.max(0, Math.min(steps.length - 1, this.activeReviewStepIdx));
+    const step = steps[idx];
+    const tz = this.host.getPrefs().timezone;
+    const isPlaying = Boolean(this.reviewPlayTimer);
+
+    this.rpReviewBarEl.hidden = false;
+    if (this.rpRevBadgeEl) this.rpRevBadgeEl.textContent = t('rev.badge');
+    if (this.rpRevCounterEl) this.rpRevCounterEl.textContent = `${idx + 1} / ${steps.length}`;
+    if (this.rpRevDescEl) {
+      this.rpRevDescEl.textContent = isComplete
+        ? `${step.label} · ${t('rev.complete')}`
+        : `${step.label}${step.detail ? ` — ${step.detail}` : ''} (${fmtReplayTime(step.time, tz)})`;
+    }
+    if (this.rpRevCommentEl) {
+      if (step.mentorComment) {
+        this.rpRevCommentEl.hidden = false;
+        this.rpRevCommentEl.textContent = `👨‍🏫 ${step.mentorComment}`;
+      } else {
+        this.rpRevCommentEl.hidden = true;
+      }
+    }
+    if (this.rpRevPlayBtn) {
+      this.rpRevPlayBtn.textContent = isPlaying
+        ? t('rev.pause')
+        : idx >= steps.length - 1
+        ? t('rev.replay')
+        : t('rev.play');
+      this.rpRevPlayBtn.classList.toggle('playing', isPlaying);
+    }
+    if (this.rpRevCommentBtn) this.rpRevCommentBtn.textContent = t('rev.noteBtn');
+    if (this.rpRevAllBtn) this.rpRevAllBtn.textContent = t('rev.showAll');
+    if (this.rpRevPrevBtn) this.rpRevPrevBtn.disabled = idx <= 0;
+    if (this.rpRevNextBtn) this.rpRevNextBtn.disabled = idx >= steps.length - 1;
+  }
+
+  async promptActiveReviewComment() {
+    const steps = this.session?.timeline || [];
+    const idx = this.activeReviewStepIdx;
+    if (!steps.length || idx < 0 || idx >= steps.length) return;
+    this._stopReviewStepsPlay();
+    const st = steps[idx];
+    const tz = this.host.getPrefs().timezone;
+    const entered = await this.host.openTextPrompt(
+      `Mentor Feedback — Step #${idx + 1}`,
+      st.mentorComment || '',
+      `${st.label} (${fmtReplayTime(st.time, tz)})`,
+      'Write mentor review comment...'
+    );
+    if (entered === null) return;
+    st.mentorComment = entered.trim();
+    this._syncReviewBar();
+    this._renderTimelineRows();
+    this.saveSessionSoon();
+  }
+
   jumpToReviewStep(idx) {
     const steps = this.session?.timeline || [];
     if (!steps.length || idx < 0 || idx >= steps.length) return;
@@ -3039,7 +3425,7 @@ export class ReplayController {
     this.activeReviewStepIdx = idx;
     this.reviewTimeFilter = step.time;
 
-    // Move replay cursor to this exact step timestamp so candles & drawings reflect that moment!
+    // Move replay cursor to this exact step timestamp so candles, drawings & trades reflect that exact moment (zero spoiler!)
     if (this.m1Bars.length > 0 && Number.isFinite(step.time)) {
       let bestIdx = 0;
       for (let i = 0; i < this.m1Bars.length; i++) {
@@ -3059,7 +3445,7 @@ export class ReplayController {
     this._syncSessionDrawingsToPanes();
     this._updateAllUi();
     this._renderTimelineRows();
-    this.host.showToast(`Step #${idx + 1}: ${step.label}`, step.mentorComment || step.detail || '');
+    this._syncReviewBar();
   }
 
   stepReviewTimeline(delta) {
@@ -3080,6 +3466,25 @@ export class ReplayController {
       this.reviewPlayTimer = null;
     }
     if (this.rpaPlayStepsBtn) this.rpaPlayStepsBtn.textContent = '▶ Play Steps';
+    this._syncReviewBar();
+  }
+
+  _startReviewStepsTimer() {
+    const steps = this.session?.timeline || [];
+    if (!steps.length) return;
+    const ms = Math.max(350, Number.parseInt(this.rpRevSpeedEl?.value, 10) || 1800);
+    if (this.rpaPlayStepsBtn) this.rpaPlayStepsBtn.textContent = '⏸ Stop';
+    this.reviewPlayTimer = setInterval(() => {
+      if (this.activeReviewStepIdx + 1 >= steps.length) {
+        clearInterval(this.reviewPlayTimer);
+        this.reviewPlayTimer = null;
+        if (this.rpaPlayStepsBtn) this.rpaPlayStepsBtn.textContent = '▶ Play Steps';
+        this._syncReviewBar(true);
+        return;
+      }
+      this.jumpToReviewStep(this.activeReviewStepIdx + 1);
+    }, ms);
+    this._syncReviewBar();
   }
 
   toggleReviewStepsPlay() {
@@ -3093,21 +3498,14 @@ export class ReplayController {
     if (this.activeReviewStepIdx >= steps.length - 1 || this.activeReviewStepIdx < 0) {
       this.jumpToReviewStep(0);
     }
-    if (this.rpaPlayStepsBtn) this.rpaPlayStepsBtn.textContent = '⏸ Stop';
-    this.reviewPlayTimer = setInterval(() => {
-      if (this.activeReviewStepIdx + 1 >= steps.length) {
-        this._stopReviewStepsPlay();
-        this.host.showToast('Mentor Review Complete', 'Reached the final recorded student action.');
-        return;
-      }
-      this.jumpToReviewStep(this.activeReviewStepIdx + 1);
-    }, 1800);
+    this._startReviewStepsTimer();
   }
 
   showAllReviewOverview() {
     this._stopReviewStepsPlay();
     this.reviewTimeFilter = null;
     this.activeReviewStepIdx = -1;
+    this._syncReviewBar();
     if (this.m1Bars.length > 0 && this.session) {
       const steps = this.session.timeline || [];
       const lastActionTime = steps.length ? steps[steps.length - 1].time : this.session.cursorTime;

@@ -479,6 +479,29 @@
       </aside>
     </div>
 
+    <!-- Floating On-Screen Mentor Step-by-Step Review Bar (visible only during Step-by-Step Review) -->
+    <div class="rp-review-bar" id="rp-review-bar" hidden role="region" aria-label="Mentor Step-by-Step Review">
+      <div class="rp-rev-left">
+        <span class="rp-rev-badge" id="rp-rev-badge">👨‍🏫 MENTOR REVIEW</span>
+        <span class="rp-rev-counter" id="rp-rev-counter">1 / 1</span>
+        <span class="rp-rev-desc" id="rp-rev-desc">—</span>
+        <span class="rp-rev-comment" id="rp-rev-comment" hidden></span>
+      </div>
+      <div class="rp-rev-controls">
+        <button type="button" class="mini-btn" id="rp-rev-prev-btn" title="Previous step (Left Arrow)">⏮</button>
+        <button type="button" class="mini-btn rp-rev-play-btn" id="rp-rev-play-btn" title="Play / Pause review (Space)">▶ Play</button>
+        <button type="button" class="mini-btn" id="rp-rev-next-btn" title="Next step (Right Arrow)">⏭</button>
+        <select id="rp-rev-speed" class="topbar-select" title="Review step speed">
+          <option value="2500">0.7x</option>
+          <option value="1800" selected>1x</option>
+          <option value="1000">2x</option>
+          <option value="500">4x</option>
+        </select>
+        <button type="button" class="mini-btn" id="rp-rev-comment-btn" title="Add or edit Mentor feedback on this step">💬 Note</button>
+        <button type="button" class="mini-btn rp-rev-all-btn" id="rp-rev-all-btn" title="Exit review &amp; show full finished overview (Esc)">👁 Show All</button>
+      </div>
+    </div>
+
     <!-- Bottom FXReplay Playback & Prop-Firm Guard Dock (visible only in Replay Mode) -->
     <footer class="replay-dock" id="replay-dock" hidden aria-label="Backtest replay controls">
       <div class="rp-dock-group">

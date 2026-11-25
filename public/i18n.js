@@ -63,6 +63,15 @@ const DICT = {
     'pos.placedLimitTitle': '⚡ {side} {type} Placed',
     'pos.placedMarketTitle': '⚡ {side} Market Filled',
     'pos.placedBody': '{lots} lots @ {entry} · SL {sl} · TP {tp}',
+
+    // Mentor Review bar
+    'rev.badge': '👨‍🏫 MENTOR REVIEW',
+    'rev.play': '▶ Play',
+    'rev.pause': '⏸ Pause',
+    'rev.replay': '↻ Replay',
+    'rev.noteBtn': '💬 Note',
+    'rev.showAll': '👁 Show All',
+    'rev.complete': 'Review complete — click 👁 Show All or ↻ Replay',
   },
   tr: {
     // Dynamic confirmations & toasts
@@ -121,6 +130,15 @@ const DICT = {
     'pos.placedLimitTitle': '⚡ {side} {type} Emri Verildi',
     'pos.placedMarketTitle': '⚡ {side} Piyasa Emri Açıldı',
     'pos.placedBody': '{lots} lot @ {entry} · SL {sl} · TP {tp}',
+
+    // Mentor Review bar
+    'rev.badge': '👨‍🏫 MENTOR İZLEME',
+    'rev.play': '▶ Oynat',
+    'rev.pause': '⏸ Durdur',
+    'rev.replay': '↻ Baştan',
+    'rev.noteBtn': '💬 Yorum',
+    'rev.showAll': '👁 Tümünü Göster',
+    'rev.complete': 'İnceleme tamamlandı — 👁 Tümünü Göster veya ↻ Baştan',
   },
 };
 

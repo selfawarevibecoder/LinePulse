@@ -3911,6 +3911,110 @@ dialog::backdrop {
   font-variant-numeric: tabular-nums;
 }
 
+/* On-Screen Floating Mentor Step-by-Step Review Bar */
+.rp-review-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 12px;
+  background: linear-gradient(90deg, rgba(30, 58, 138, 0.42), rgba(15, 23, 42, 0.96) 38%, rgba(15, 23, 42, 0.96));
+  border-top: 1px solid rgba(56, 189, 248, 0.45);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.rp-review-bar[hidden] {
+  display: none !important;
+}
+
+.rp-rev-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.rp-rev-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.rp-rev-counter {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  color: #f8fafc;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.rp-rev-desc {
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rp-rev-comment {
+  font-size: 11px;
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  padding: 1px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+  flex-shrink: 1;
+}
+
+.rp-rev-comment[hidden] {
+  display: none !important;
+}
+
+.rp-rev-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.rp-rev-play-btn {
+  min-width: 72px;
+  font-weight: 700;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+.rp-rev-play-btn.playing {
+  background: #d97706 !important;
+  border-color: #f59e0b !important;
+}
+
+.rp-rev-all-btn:hover {
+  border-color: var(--accent);
+  color: #7dd3fc;
+}
+
 .pane-context-menu {
   position: absolute;
   z-index: 30;

@@ -173,6 +173,7 @@ export class ChartPane {
     this.drawings = [];
     this.draftDrawing = null;
     this.selectedDrawingIds = new Set();
+    this.editBarOpen = false;
     this.dragInfo = null;
     this.marqueeInfo = null;
 
@@ -258,7 +259,10 @@ export class ChartPane {
       <div class="pane-canvas-host">
         <div class="drawing-edit-bar" hidden>
           <span class="dbar-count" hidden></span>
-          <button type="button" class="dbar-btn dbar-label-btn" title="Add / edit label on drawing">T Label</button>
+          <label class="dbar-label-wrap" title="Type label directly on drawing (Enter to finish)">
+            <span class="dbar-label-ico" aria-hidden="true">T</span>
+            <input type="text" class="dbar-label-input" placeholder="Add label..." autocomplete="off" spellcheck="false">
+          </label>
           <div class="dbar-text-align" hidden>
             <div class="dbar-align-grp" role="group" aria-label="Label horizontal position">
               <button type="button" class="dbar-align-btn" data-halign="left" title="Label Left">L</button>
@@ -306,6 +310,7 @@ export class ChartPane {
           <button type="button" class="dbar-btn dbar-hide-btn" title="Hide selected drawing(s)">Hide</button>
           <button type="button" class="dbar-btn dbar-alert-btn" title="Create price alert at this line" hidden>🔔 Alert</button>
           <button type="button" class="dbar-btn dbar-del-btn" title="Delete selected drawing(s) (Delete)">Delete</button>
+          <button type="button" class="dbar-btn dbar-close-btn" title="Close (Esc)" aria-label="Close">✕</button>
         </div>
         <div class="pane-scale-pills" role="group" aria-label="Price scale mode">
           <button type="button" class="scale-pill-btn pane-log-btn ${this.state.logScale ? 'active' : ''}" aria-pressed="${this.state.logScale ? 'true' : 'false'}" title="Toggle Logarithmic price scale">log</button>
@@ -338,7 +343,8 @@ export class ChartPane {
     this.hostEl = el.querySelector('.pane-canvas-host');
     this.editBarEl = el.querySelector('.drawing-edit-bar');
     this.dbarCountEl = el.querySelector('.dbar-count');
-    this.dbarLabelBtn = el.querySelector('.dbar-label-btn');
+    this.dbarLabelWrap = el.querySelector('.dbar-label-wrap');
+    this.dbarLabelInput = el.querySelector('.dbar-label-input');
     this.dbarTextAlignEl = el.querySelector('.dbar-text-align');
     this.dbarSwatchesEl = el.querySelector('.dbar-swatches');
     this.dbarColorWrap = el.querySelector('.dbar-color-wrap');
@@ -357,6 +363,7 @@ export class ChartPane {
     this.dbarHideBtn = el.querySelector('.dbar-hide-btn');
     this.dbarAlertBtn = el.querySelector('.dbar-alert-btn');
     this.dbarDelBtn = el.querySelector('.dbar-del-btn');
+    this.dbarCloseBtn = el.querySelector('.dbar-close-btn');
     this.logScaleBtn = el.querySelector('.pane-log-btn');
     this.autoScaleBtn = el.querySelector('.pane-auto-btn');
     this.posTooltipEl = el.querySelector('.pane-pos-tooltip');
@@ -455,7 +462,40 @@ export class ChartPane {
     this.dbarPosCapInput.addEventListener('change', onPosCfgChange);
     this.dbarPosRiskInput.addEventListener('input', onPosCfgChange);
     this.dbarPosRiskInput.addEventListener('change', onPosCfgChange);
-    this.dbarLabelBtn.addEventListener('click', () => this.promptEditSelectedLabel());
+    this.dbarLabelInput?.addEventListener('input', () => {
+      const d = this._getPrimarySelectedDrawing();
+      if (!d) return;
+      d.text = this.dbarLabelInput.value;
+      if (this.dbarTextAlignEl && d.type !== 'text' && d.type !== 'longpos' && d.type !== 'shortpos') {
+        this.dbarTextAlignEl.hidden = !(Boolean(d.text.trim()) || d.type === 'hline');
+      }
+      this.drawingsPrimitive.requestRedraw();
+    });
+    const commitInlineLabel = () => {
+      const d = this._getPrimarySelectedDrawing();
+      if (!d) return;
+      const trimmed = this.dbarLabelInput.value.trim();
+      if (d.text !== trimmed) {
+        d.text = trimmed;
+      }
+      this._commitDrawings();
+    };
+    this.dbarLabelInput?.addEventListener('change', commitInlineLabel);
+    this.dbarLabelInput?.addEventListener('blur', commitInlineLabel);
+    this.dbarLabelInput?.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitInlineLabel();
+        this.dbarLabelInput.blur();
+        this.closeEditBar();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this.dbarLabelInput.blur();
+        this.closeEditBar();
+      }
+    });
+    this.dbarCloseBtn?.addEventListener('click', () => this.closeEditBar());
     this.dbarTextAlignEl?.addEventListener('click', (e) => {
       const hBtn = e.target.closest('[data-halign]');
       const vBtn = e.target.closest('[data-valign]');
@@ -782,6 +822,7 @@ export class ChartPane {
     this.drawingsPrimitive.setHideAll(this.hideAllDrawings);
     if (this.hideAllDrawings && this.selectedDrawingIds.size > 0) {
       this.selectedDrawingIds.clear();
+      this.editBarOpen = false;
       this._syncEditBar();
       this._notifySelectionChanged();
     }
@@ -793,12 +834,14 @@ export class ChartPane {
     for (const id of Array.from(this.selectedDrawingIds)) {
       if (!validIds.has(id)) this.selectedDrawingIds.delete(id);
     }
+    if (this.selectedDrawingIds.size === 0) this.editBarOpen = false;
     this.drawingsPrimitive.setData(this.drawings, this.draftDrawing, this.selectedDrawingIds);
     this._syncEditBar();
   }
 
   setSelectedDrawingIds(idsIterable) {
     this.selectedDrawingIds = new Set(idsIterable || []);
+    if (this.selectedDrawingIds.size === 0) this.editBarOpen = false;
     this.drawingsPrimitive.setData(this.drawings, this.draftDrawing, this.selectedDrawingIds);
     this._syncEditBar();
   }
@@ -808,6 +851,7 @@ export class ChartPane {
     this.selectedDrawingIds = new Set(
       this.drawings.filter((d) => !d.hidden).map((d) => d.id)
     );
+    this.editBarOpen = this.selectedDrawingIds.size > 1;
     this.drawingsPrimitive.setData(this.drawings, this.draftDrawing, this.selectedDrawingIds);
     this._syncEditBar();
     this._notifySelectionChanged();
@@ -968,18 +1012,29 @@ export class ChartPane {
   _syncEditBar() {
     const selected = this._getSelectedDrawings();
     if (selected.length === 0) {
+      this.editBarOpen = false;
       this.editBarEl.hidden = true;
       this._hidePosInfoCard();
       return;
     }
-    this.editBarEl.hidden = false;
+
     const isMulti = selected.length > 1;
     const primary = selected[0];
+    const isPosTool = !isMulti && (primary.type === 'longpos' || primary.type === 'shortpos');
+
+    // Position tool info & FXReplay execution card appears cleanly on single-click without needing the color bar!
+    if (isPosTool && this._posTooltipDismissedId !== primary.id) {
+      this._renderPosInfoCard(primary);
+    } else {
+      this._hidePosInfoCard();
+    }
+
+    // Floating style/label edit bar opens ONLY on double-click (or multi-selection)
+    this.editBarEl.hidden = !this.editBarOpen;
+    if (!this.editBarOpen) return;
 
     this.dbarCountEl.hidden = !isMulti;
     this.dbarCountEl.textContent = `${selected.length} selected`;
-
-    this.dbarLabelBtn.hidden = isMulti;
 
     const normalizedColor = /^#[0-9a-f]{6}$/i.test(primary.color || '')
       ? primary.color.toLowerCase()
@@ -994,14 +1049,25 @@ export class ChartPane {
       sw.classList.toggle('active', !isMulti && sw.dataset.color.toLowerCase() === normalizedColor);
     }
 
-    const isPosTool = !isMulti && (primary.type === 'longpos' || primary.type === 'shortpos');
     const isRect = !isMulti && primary.type === 'rect';
     const supportsArrow =
       !isMulti && ['trend', 'arrow', 'darrow', 'zigzag'].includes(primary.type);
     const showTextAlign =
-      !isMulti && !isPosTool && primary.type !== 'text' && (Boolean(primary.text) || primary.type === 'hline');
+      !isMulti &&
+      !isPosTool &&
+      primary.type !== 'text' &&
+      (Boolean((primary.text || '').trim()) || primary.type === 'hline');
 
-    this.dbarLabelBtn.hidden = isMulti || isPosTool;
+    if (this.dbarLabelWrap) {
+      this.dbarLabelWrap.hidden = isMulti || isPosTool;
+    }
+    if (this.dbarLabelInput && !isMulti && !isPosTool) {
+      this.dbarLabelInput.placeholder =
+        primary.type === 'text' ? t('dbar.notePlaceholder') : t('dbar.labelPlaceholder');
+      if (document.activeElement !== this.dbarLabelInput) {
+        this.dbarLabelInput.value = primary.text || '';
+      }
+    }
     if (this.dbarTextAlignEl) {
       this.dbarTextAlignEl.hidden = !showTextAlign;
       if (showTextAlign) {
@@ -1062,18 +1128,16 @@ export class ChartPane {
     if (this.dbarPosCfgEl) {
       this.dbarPosCfgEl.hidden = !isPosTool;
       if (isPosTool) {
+        const rpInfo = this.replayMode ? this.callbacks.getReplayAccountInfo?.() : null;
         if (document.activeElement !== this.dbarPosCapInput) {
-          this.dbarPosCapInput.value = String(primary.accountSize || 100000);
+          this.dbarPosCapInput.value = String(
+            rpInfo?.balance > 0 ? Math.round(rpInfo.balance) : primary.accountSize || 100000
+          );
         }
         if (document.activeElement !== this.dbarPosRiskInput) {
           this.dbarPosRiskInput.value = String(primary.riskPct || 1);
         }
       }
-    }
-    if (isPosTool && this._posTooltipDismissedId !== primary.id) {
-      this._renderPosInfoCard(primary);
-    } else {
-      this._hidePosInfoCard();
     }
     const curLineStyle = getDrawingLineStyle(primary);
     this.dbarDashBtn.innerHTML = LINE_STYLE_SVGS[curLineStyle] || LINE_STYLE_SVGS.solid;
@@ -1113,11 +1177,34 @@ export class ChartPane {
     this.callbacks.onDrawingsChanged(this.symbolKey, this.drawings);
   }
 
+  closeEditBar() {
+    if (!this.editBarOpen) return false;
+    this.editBarOpen = false;
+    this._syncEditBar();
+    return true;
+  }
+
+  deleteDrawingById(id) {
+    if (!id) return false;
+    const before = this.drawings.length;
+    this.drawings = this.drawings.filter((d) => d.id !== id);
+    if (this.drawings.length === before) return false;
+    this.selectedDrawingIds.delete(id);
+    if (this.selectedDrawingIds.size === 0) {
+      this.editBarOpen = false;
+    }
+    this._syncEditBar();
+    this._commitDrawings();
+    this._notifySelectionChanged();
+    return true;
+  }
+
   hideSelectedDrawings() {
     const selected = this._getSelectedDrawings();
     if (!selected.length) return false;
     for (const d of selected) d.hidden = true;
     this.selectedDrawingIds.clear();
+    this.editBarOpen = false;
     this._syncEditBar();
     this._commitDrawings();
     this._notifySelectionChanged();
@@ -1137,6 +1224,7 @@ export class ChartPane {
     this.drawings = this.drawings.filter((d) => !this.selectedDrawingIds.has(d.id));
     if (this.drawings.length !== before) {
       this.selectedDrawingIds.clear();
+      this.editBarOpen = false;
       this._syncEditBar();
       this._commitDrawings();
       this._notifySelectionChanged();
@@ -1149,6 +1237,7 @@ export class ChartPane {
     if (this.drawings.length === 0) return false;
     this.drawings = this.drawings.slice(0, -1);
     this.selectedDrawingIds.clear();
+    this.editBarOpen = false;
     this._syncEditBar();
     this._commitDrawings();
     this._notifySelectionChanged();
@@ -1160,6 +1249,7 @@ export class ChartPane {
     this.drawings = [];
     this.draftDrawing = null;
     this.selectedDrawingIds.clear();
+    this.editBarOpen = false;
     this._syncEditBar();
     this._commitDrawings();
     this._notifySelectionChanged();
@@ -1323,9 +1413,16 @@ export class ChartPane {
     if (this.ctxMenuEl) this.ctxMenuEl.hidden = true;
   }
 
-  _showContextMenu(x, y, time, price, targetAlert = null) {
+  _showContextMenu(x, y, time, price, targetAlert = null, targetDrawing = null) {
     if (!this.ctxMenuEl || !Number.isFinite(price)) return;
     const priceStr = price.toFixed(this.precision);
+    const drawSection = targetDrawing
+      ? `
+      <button type="button" class="ctx-item" data-ctx="edit-draw">${t('dbar.ctxEdit')}</button>
+      <button type="button" class="ctx-item" data-ctx="del-draw" style="color:var(--down)">${t('dbar.ctxDelete')}</button>
+      <div class="ctx-sep"></div>
+    `
+      : '';
     const alertSection = targetAlert
       ? `
       <button type="button" class="ctx-item" data-ctx="edit-alert">✎ Edit Alert (${Number(targetAlert.price).toFixed(this.precision)})</button>
@@ -1334,6 +1431,7 @@ export class ChartPane {
     `
       : '';
     this.ctxMenuEl.innerHTML = `
+      ${drawSection}
       ${alertSection}
       <button type="button" class="ctx-item" data-ctx="alert">🔔 Add Alert at <b>${priceStr}</b></button>
       <button type="button" class="ctx-item" data-ctx="hline">─── Add Horizontal Line at ${priceStr}</button>
@@ -1343,6 +1441,27 @@ export class ChartPane {
       <div class="ctx-sep"></div>
       <button type="button" class="ctx-item" data-ctx="autofit">↺ Reset Scale (Auto)</button>
     `;
+
+    if (targetDrawing) {
+      this.ctxMenuEl.querySelector('[data-ctx="edit-draw"]')?.addEventListener('click', () => {
+        this._hideContextMenu();
+        this.selectedDrawingIds = new Set([targetDrawing.id]);
+        this.editBarOpen = true;
+        this._syncEditBar();
+        this.drawingsPrimitive.setData(this.drawings, null, this.selectedDrawingIds);
+        this._notifySelectionChanged();
+        if (this.dbarLabelInput && !this.dbarLabelWrap?.hidden) {
+          requestAnimationFrame(() => {
+            this.dbarLabelInput.focus({ preventScroll: true });
+            this.dbarLabelInput.select();
+          });
+        }
+      });
+      this.ctxMenuEl.querySelector('[data-ctx="del-draw"]')?.addEventListener('click', () => {
+        this._hideContextMenu();
+        this.deleteDrawingById(targetDrawing.id);
+      });
+    }
 
     if (targetAlert) {
       this.ctxMenuEl.querySelector('[data-ctx="edit-alert"]')?.addEventListener('click', () => {
@@ -1389,6 +1508,7 @@ export class ChartPane {
       };
       this.drawings = [...this.drawings, item];
       this.selectedDrawingIds = new Set([item.id]);
+      this.editBarOpen = false;
       this._commitDrawings();
       this._syncEditBar();
       this._notifySelectionChanged();
@@ -1413,13 +1533,13 @@ export class ChartPane {
     const hostW = this.hostEl.clientWidth || 400;
     const hostH = this.hostEl.clientHeight || 300;
     const menuW = 215;
-    const menuH = 175;
+    const menuH = targetDrawing ? 225 : 175;
     this.ctxMenuEl.style.left = `${Math.round(Math.max(6, Math.min(hostW - menuW - 8, x)))}px`;
     this.ctxMenuEl.style.top = `${Math.round(Math.max(6, Math.min(hostH - menuH - 8, y)))}px`;
   }
 
   createPositionToolDrawing(type, time, entryPrice) {
-    // Smart default SL/TP scaled proportionally to visible chart range (~8% of visible price height for SL, 2:1 for TP)
+    // Smart default SL/TP scaled proportionally to visible chart range (~12% of visible price height for SL, 2:1 for TP)
     const hostH = this.hostEl.clientHeight || 300;
     const topPx = this.drawingsPrimitive.yToPrice(30);
     const botPx = this.drawingsPrimitive.yToPrice(hostH - 40);
@@ -1433,6 +1553,7 @@ export class ChartPane {
     const widthSec = Math.max(this.bucketSec || 60, 60) * 24;
 
     const def = this._getDrawDefaults();
+    const rpInfo = this.replayMode ? this.callbacks.getReplayAccountInfo?.() : null;
     const item = {
       id: `drw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       type,
@@ -1440,14 +1561,15 @@ export class ChartPane {
       p2: { time: time + widthSec, price: entryPrice },
       tp: Number((isLong ? entryPrice + tpDist : entryPrice - tpDist).toFixed(this.precision)),
       sl: Number((isLong ? entryPrice - slDist : entryPrice + slDist).toFixed(this.precision)),
-      accountSize: def.accountSize,
-      riskPct: def.riskPct,
+      accountSize: rpInfo?.balance > 0 ? Math.round(rpInfo.balance) : def.accountSize,
+      riskPct: rpInfo?.riskPct > 0 ? rpInfo.riskPct : def.riskPct,
       color: isLong ? '#26a69a' : '#ef5350',
       hidden: false,
       text: '',
     };
     this.drawings = [...this.drawings, item];
     this.selectedDrawingIds = new Set([item.id]);
+    this.editBarOpen = false;
     this._posTooltipDismissedId = null;
     this.drawingsPrimitive.setSnapIndicator(null);
     this._commitDrawings();
@@ -1464,8 +1586,8 @@ export class ChartPane {
     if (!this.posTooltipEl || !d) return;
     const hostW = this.hostEl.clientWidth || 400;
     const hostH = this.hostEl.clientHeight || 300;
-    const tipW = this.posTooltipEl.offsetWidth || 224;
-    const tipH = this.posTooltipEl.offsetHeight || 126;
+    const tipW = this.posTooltipEl.offsetWidth || 236;
+    const tipH = this.posTooltipEl.offsetHeight || (this.replayMode ? 168 : 128);
 
     const x1 = this.drawingsPrimitive.timeToX(d.p1?.time);
     const x2 = this.drawingsPrimitive.timeToX(d.p2?.time);
@@ -1503,26 +1625,100 @@ export class ChartPane {
       this.posTooltipEl.hidden = true;
       return;
     }
-    const m = computePositionToolMetrics(d, this.state.symbol);
+    const rpInfo = this.replayMode ? this.callbacks.getReplayAccountInfo?.() : null;
+    if (rpInfo?.balance > 0) {
+      d.accountSize = Math.round(rpInfo.balance);
+    }
+    const m = computePositionToolMetrics(d, this.state.symbol, this.state.source);
     const isLong = d.type === 'longpos';
+    const unitLbl = m.spec?.unit || 'lots';
+
+    // Smart Limit vs Stop detection relative to current Replay candle close
+    const curPrice =
+      rpInfo && rpInfo.symbol === this.state.symbol && Number.isFinite(rpInfo.currentPrice)
+        ? rpInfo.currentPrice
+        : Number.isFinite(this.lastPrice)
+        ? this.lastPrice
+        : this.bars[this.bars.length - 1]?.close;
+    let pendingType = 'limit';
+    if (Number.isFinite(curPrice)) {
+      if (isLong) {
+        pendingType = m.entry > curPrice ? 'stop' : 'limit';
+      } else {
+        pendingType = m.entry < curPrice ? 'stop' : 'limit';
+      }
+    }
+    const execLabel = `⚡ ${isLong ? 'BUY' : 'SELL'} ${pendingType.toUpperCase()} @ ${m.entry.toFixed(this.precision)}`;
+
     this.posTooltipEl.innerHTML = `
       <div class="ptip-head ${isLong ? 'up' : 'down'}">
         <span>${isLong ? '▲ LONG' : '▼ SHORT'} · <b>${m.rr.toFixed(2)}x</b></span>
-        <button type="button" class="ptip-close" title="Hide card" aria-label="Hide position details">✕</button>
+        <div class="ptip-head-actions">
+          <button type="button" class="ptip-del-tool" title="${t('pos.deleteTool')}" aria-label="${t('pos.deleteTool')}">🗑</button>
+          <button type="button" class="ptip-close" title="Hide card" aria-label="Hide position details">✕</button>
+        </div>
       </div>
       <div class="ptip-grid">
-        <div><span>Capital</span><b>$${m.accountSize.toLocaleString()}</b></div>
-        <div><span>Risk (${m.riskPct}%)</span><b class="down">-$${Math.round(m.riskUsd).toLocaleString()}</b></div>
-        <div><span>Lot Size</span><b class="accent">${m.lots.toFixed(2)} lots</b></div>
-        <div><span>Target (+${m.rewardPct.toFixed(2)}%)</span><b class="up">+$${Math.round(m.rewardUsd).toLocaleString()}</b></div>
+        <div><span>${t('pos.capital')}</span><b>$${m.accountSize.toLocaleString()}</b></div>
+        <div>
+          <span class="ptip-risk-row">${t('pos.risk')} ${
+            this.replayMode
+              ? `<input type="number" class="ptip-risk-input" value="${m.riskPct}" min="0.05" max="100" step="0.25" aria-label="Risk percent">%`
+              : `(${m.riskPct}%)`
+          }</span>
+          <b class="down" data-ptip-risk-usd>-$${Math.round(m.riskUsd).toLocaleString()}</b>
+        </div>
+        <div><span>${t('pos.lotSize')}</span><b class="accent" data-ptip-lots>${m.lots.toFixed(2)} ${unitLbl}</b></div>
+        <div><span data-ptip-reward-pct>${t('pos.target')} (+${m.rewardPct.toFixed(2)}%)</span><b class="up" data-ptip-reward-usd>+$${Math.round(m.rewardUsd).toLocaleString()}</b></div>
       </div>
       <div class="ptip-foot">E ${m.entry.toFixed(this.precision)} · SL ${m.sl.toFixed(this.precision)} (${m.slPips.toFixed(1)}p) · TP ${m.tp.toFixed(this.precision)} (${m.tpPips.toFixed(1)}p)</div>
+      ${
+        this.replayMode
+          ? `
+      <div class="ptip-actions">
+        <button type="button" class="ptip-exec-btn ${isLong ? 'up' : 'down'}" data-ptip-exec="${pendingType}">${execLabel}</button>
+        <button type="button" class="ptip-market-btn" data-ptip-exec="market">${t('pos.marketBtn')}</button>
+      </div>`
+          : ''
+      }
     `;
+    this.posTooltipEl.querySelector('.ptip-del-tool')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.deleteDrawingById(d.id);
+    });
     this.posTooltipEl.querySelector('.ptip-close')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       this._posTooltipDismissedId = d.id;
       this._hidePosInfoCard();
     });
+    const riskInput = this.posTooltipEl.querySelector('.ptip-risk-input');
+    if (riskInput) {
+      riskInput.addEventListener('keydown', (ev) => ev.stopPropagation());
+      riskInput.addEventListener('input', (ev) => {
+        ev.stopPropagation();
+        const nextPct = Math.max(0.05, Math.min(100, Number.parseFloat(riskInput.value) || 0.25));
+        d.riskPct = nextPct;
+        this._saveDrawDefault({ riskPct: nextPct });
+        const nextM = computePositionToolMetrics(d, this.state.symbol, this.state.source);
+        const rUsdEl = this.posTooltipEl.querySelector('[data-ptip-risk-usd]');
+        const lotsEl = this.posTooltipEl.querySelector('[data-ptip-lots]');
+        const tUsdEl = this.posTooltipEl.querySelector('[data-ptip-reward-usd]');
+        const tPctEl = this.posTooltipEl.querySelector('[data-ptip-reward-pct]');
+        if (rUsdEl) rUsdEl.textContent = `-$${Math.round(nextM.riskUsd).toLocaleString()}`;
+        if (lotsEl) lotsEl.textContent = `${nextM.lots.toFixed(2)} ${nextM.spec?.unit || 'lots'}`;
+        if (tUsdEl) tUsdEl.textContent = `+$${Math.round(nextM.rewardUsd).toLocaleString()}`;
+        if (tPctEl) tPctEl.textContent = `${t('pos.target')} (+${nextM.rewardPct.toFixed(2)}%)`;
+        this.drawingsPrimitive.requestRedraw();
+      });
+      riskInput.addEventListener('change', () => this._commitDrawings());
+    }
+    for (const btn of this.posTooltipEl.querySelectorAll('[data-ptip-exec]')) {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const oType = btn.dataset.ptipExec || 'limit';
+        this.callbacks.onExecutePositionTool?.(d, { orderType: oType, pane: this });
+      });
+    }
     this.posTooltipEl.hidden = false;
     this._positionPosInfoCard(d);
   }
@@ -1538,6 +1734,7 @@ export class ChartPane {
       if (Array.isArray(finished.points) && finished.points.length >= 2) {
         this.drawings = [...this.drawings, finished];
         this.selectedDrawingIds = new Set([finished.id]);
+        this.editBarOpen = false;
         this._commitDrawings();
         this._syncEditBar();
         this._notifySelectionChanged();
@@ -1577,7 +1774,8 @@ export class ChartPane {
       e.stopPropagation();
       this.callbacks.onActivate(this.id);
       const alertHit = this.drawingsPrimitive.hitTestAlert(x, y);
-      this._showContextMenu(x, y, time, price, alertHit?.alert || null);
+      const drawHit = alertHit ? null : this.drawingsPrimitive.hitTest(x, y);
+      this._showContextMenu(x, y, time, price, alertHit?.alert || null, drawHit?.drawing || null);
     });
 
     host.addEventListener('pointerdown', async (e) => {
@@ -1609,15 +1807,21 @@ export class ChartPane {
           this._hideNewsPopup();
         }
 
-        // In Replay mode, allow dragging open Position / Pending Order SL, TP, or Entry lines directly!
+        // In Replay mode, allow clicking × on order/position pills OR dragging SL / TP / Pending Entry lines directly!
         if (this.replayMode) {
           const lineHit = this.drawingsPrimitive.hitTestReplayLine(x, y);
           if (lineHit) {
             e.preventDefault();
             e.stopPropagation();
-            this.replayLineDrag = { ...lineHit };
-            this._setChartPanEnabled(false);
-            host.style.cursor = 'ns-resize';
+            if (lineHit.onClose) {
+              this.callbacks.onReplayCloseOrClear?.(lineHit.kind, lineHit.id, lineHit.field);
+              return;
+            }
+            if (lineHit.draggable) {
+              this.replayLineDrag = { ...lineHit };
+              this._setChartPanEnabled(false);
+              host.style.cursor = 'ns-resize';
+            }
             return;
           }
         }
@@ -1637,6 +1841,7 @@ export class ChartPane {
           }
           if (this.selectedDrawingIds.size > 0) {
             this.selectedDrawingIds.clear();
+            this.editBarOpen = false;
             this._syncEditBar();
             this.drawingsPrimitive.setData(this.drawings, null, this.selectedDrawingIds);
             this._notifySelectionChanged();
@@ -1705,6 +1910,7 @@ export class ChartPane {
           };
           this.drawings = [...this.drawings, item];
           this.selectedDrawingIds = new Set([item.id]);
+          this.editBarOpen = false;
           this.drawingsPrimitive.setSnapIndicator(null);
           this._commitDrawings();
           this._syncEditBar();
@@ -1734,6 +1940,7 @@ export class ChartPane {
               };
               this.drawings = [...this.drawings, item];
               this.selectedDrawingIds = new Set([item.id]);
+              this.editBarOpen = false;
               this._commitDrawings();
               this._syncEditBar();
               this._notifySelectionChanged();
@@ -1832,6 +2039,7 @@ export class ChartPane {
           this.drawingsPrimitive.setSnapIndicator(null);
           this.drawings = [...this.drawings, finished];
           this.selectedDrawingIds = new Set([finished.id]);
+          this.editBarOpen = false;
           this._commitDrawings();
           this._syncEditBar();
           this._notifySelectionChanged();
@@ -1854,6 +2062,7 @@ export class ChartPane {
           } else {
             this.selectedDrawingIds.add(hit.drawing.id);
           }
+          this.editBarOpen = this.selectedDrawingIds.size > 1;
           this._syncEditBar();
           this.drawingsPrimitive.setData(this.drawings, null, this.selectedDrawingIds);
           this._notifySelectionChanged();
@@ -1863,6 +2072,8 @@ export class ChartPane {
         if (!this.selectedDrawingIds.has(hit.drawing.id)) {
           this.selectedDrawingIds = new Set([hit.drawing.id]);
         }
+        // Single-click selects handles for drag/delete cleanly without opening the color/edit bar
+        this.editBarOpen = false;
         if (hit.drawing.type === 'longpos' || hit.drawing.type === 'shortpos') {
           this._posTooltipDismissedId = null;
         }
@@ -1905,8 +2116,9 @@ export class ChartPane {
         this.drawingsPrimitive.setMarquee(this.marqueeInfo);
       } else {
         this.isPanningChart = true;
-        if (this.selectedDrawingIds.size > 0) {
+        if (this.selectedDrawingIds.size > 0 || this.editBarOpen) {
           this.selectedDrawingIds.clear();
+          this.editBarOpen = false;
           this._syncEditBar();
           this.drawingsPrimitive.setData(this.drawings, null, this.selectedDrawingIds);
           this._notifySelectionChanged();
@@ -1972,18 +2184,27 @@ export class ChartPane {
           const hoveredNews = this.drawingsPrimitive.hitTestNews(x, y);
           if (hoveredNews) {
             this.drawingsPrimitive.setHoveredAlertId(null);
+            this.drawingsPrimitive.setHoveredDrawingId(null);
             host.style.cursor = 'pointer';
-          } else if (this.replayMode && this.drawingsPrimitive.hitTestReplayLine(x, y)) {
-            this.drawingsPrimitive.setHoveredAlertId(null);
-            host.style.cursor = 'ns-resize';
           } else {
+            if (this.replayMode) {
+              const rpHit = this.drawingsPrimitive.hitTestReplayLine(x, y);
+              if (rpHit) {
+                this.drawingsPrimitive.setHoveredAlertId(null);
+                this.drawingsPrimitive.setHoveredDrawingId(null);
+                host.style.cursor = rpHit.onClose ? 'pointer' : rpHit.draggable ? 'ns-resize' : 'default';
+                return;
+              }
+            }
             const hoveredAlert = this.drawingsPrimitive.hitTestAlert(x, y);
             if (hoveredAlert) {
               this.drawingsPrimitive.setHoveredAlertId(hoveredAlert.alert.id);
+              this.drawingsPrimitive.setHoveredDrawingId(null);
               host.style.cursor = hoveredAlert.onDelete ? 'pointer' : 'ns-resize';
             } else {
               this.drawingsPrimitive.setHoveredAlertId(null);
               const drawHit = this.drawingsPrimitive.hitTest(x, y);
+              this.drawingsPrimitive.setHoveredDrawingId(drawHit ? drawHit.drawing.id : null);
               if (drawHit && (drawHit.drawing.type === 'longpos' || drawHit.drawing.type === 'shortpos')) {
                 host.style.cursor =
                   drawHit.handle === 'tp' || drawHit.handle === 'sl'
@@ -1996,6 +2217,8 @@ export class ChartPane {
               }
             }
           }
+        } else {
+          this.drawingsPrimitive.setHoveredDrawingId(null);
         }
         return;
       }
@@ -2168,6 +2391,7 @@ export class ChartPane {
     host.addEventListener('pointerleave', () => {
       this.drawingsPrimitive.setSnapIndicator(null);
       this.drawingsPrimitive.setHoveredAlertId(null);
+      this.drawingsPrimitive.setHoveredDrawingId(null);
     });
 
     const finishPointer = () => {
@@ -2202,6 +2426,7 @@ export class ChartPane {
         this.drawingsPrimitive.setMarquee(null);
         const ids = this.drawingsPrimitive.hitTestRect(m.x1, m.y1, m.x2, m.y2);
         this.selectedDrawingIds = new Set(ids);
+        this.editBarOpen = this.selectedDrawingIds.size > 1;
         this.drawingsPrimitive.setData(this.drawings, null, this.selectedDrawingIds);
         this._syncEditBar();
         this._notifySelectionChanged();
@@ -2214,6 +2439,7 @@ export class ChartPane {
         if (finished.points.length >= 2) {
           this.drawings = [...this.drawings, finished];
           this.selectedDrawingIds = new Set([finished.id]);
+          this.editBarOpen = false;
           this._commitDrawings();
           this._syncEditBar();
           this._notifySelectionChanged();
@@ -2270,9 +2496,19 @@ export class ChartPane {
       if (hit) {
         e.stopPropagation();
         this.selectedDrawingIds = new Set([hit.drawing.id]);
+        this.editBarOpen = true;
+        if (hit.drawing.type === 'longpos' || hit.drawing.type === 'shortpos') {
+          this._posTooltipDismissedId = null;
+        }
         this._syncEditBar();
+        this.drawingsPrimitive.setData(this.drawings, null, this.selectedDrawingIds);
         this._notifySelectionChanged();
-        this.promptEditSelectedLabel();
+        if (this.dbarLabelInput && !this.dbarLabelWrap?.hidden) {
+          requestAnimationFrame(() => {
+            this.dbarLabelInput.focus({ preventScroll: true });
+            this.dbarLabelInput.select();
+          });
+        }
       } else {
         this.resetChartView();
       }
@@ -2377,6 +2613,7 @@ export class ChartPane {
       );
     }
     this.selectedDrawingIds.clear();
+    this.editBarOpen = false;
     this.draftDrawing = null;
     this._syncEditBar();
     this._syncHeaderLabels();

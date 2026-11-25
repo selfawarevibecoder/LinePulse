@@ -1332,6 +1332,58 @@ body.resizing-row * {
   color: #ffffff;
 }
 
+.dbar-close-btn {
+  padding: 0 6px;
+  color: var(--text-secondary);
+}
+
+.dbar-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.dbar-label-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.dbar-label-wrap[hidden] {
+  display: none !important;
+}
+
+.dbar-label-ico {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.dbar-label-input {
+  width: 112px;
+  min-width: 72px;
+  height: 20px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 0;
+  user-select: text;
+}
+
+.dbar-label-input::placeholder {
+  color: var(--text-muted, #64748b);
+  font-weight: 400;
+}
+
 .dbar-color-wrap {
   position: relative;
   display: inline-flex;
@@ -3708,22 +3760,119 @@ dialog::backdrop {
 .ptip-head.up { color: #4ade80; }
 .ptip-head.down { color: #f87171; }
 
+.ptip-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ptip-del-tool,
 .ptip-close {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-secondary);
   background: transparent;
   cursor: pointer;
 }
 
+.ptip-del-tool:hover {
+  background: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+}
+
 .ptip-close:hover {
   background: rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
+}
+
+.ptip-risk-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ptip-risk-input {
+  width: 42px;
+  height: 17px;
+  padding: 0 3px;
+  border-radius: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.ptip-risk-input:focus {
+  border-color: var(--accent);
+}
+
+.ptip-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.ptip-exec-btn {
+  flex: 1;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: filter 110ms ease, transform 80ms ease;
+}
+
+.ptip-exec-btn.up {
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  border: 1px solid rgba(74, 222, 128, 0.45);
+}
+
+.ptip-exec-btn.down {
+  background: linear-gradient(180deg, #ef4444, #dc2626);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.ptip-exec-btn:hover {
+  filter: brightness(1.1);
+}
+
+.ptip-exec-btn:active {
+  transform: scale(0.98);
+}
+
+.ptip-market-btn {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ptip-market-btn:hover {
+  background: rgba(51, 65, 85, 0.95);
+  border-color: var(--accent);
 }
 
 .ptip-grid {

@@ -1309,6 +1309,11 @@ function renderGrid() {
           onReplayLoadPane: (pane) => replayCtrl?.loadPaneReplayContext(pane, { fitView: true }),
           onReplayModifyOrder: (kind, id, field, newPrice) =>
             replayCtrl?.modifyOrderOnChart(kind, id, field, newPrice),
+          onReplayCloseOrClear: (kind, id, field) =>
+            replayCtrl?.closeOrClearFromChart(kind, id, field),
+          getReplayAccountInfo: () => replayCtrl?.getAccountInfo() || null,
+          onExecutePositionTool: (drawing, opts) =>
+            replayCtrl?.placeOrderFromPositionTool(drawing, opts),
         },
       });
       panes.set(def.id, inst);
@@ -4047,6 +4052,9 @@ window.addEventListener('keydown', (e) => {
 
   if (e.key === 'Escape') {
     if (panes.get(activePaneId)?.finishActiveDraft()) {
+      return;
+    }
+    if (panes.get(activePaneId)?.closeEditBar()) {
       return;
     }
     if (activeDrawingTool !== 'cursor') {

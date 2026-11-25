@@ -8,6 +8,7 @@
  */
 
 import { t, onLangChange } from './i18n.js';
+import { getInstrumentSpec } from './drawings-primitive.js';
 
 const TF_SECONDS = {
   '1s': 1,
@@ -48,46 +49,6 @@ function getBucketTime(unixSec, tf) {
     return Math.floor((unixSec - weekOffset) / sec) * sec + weekOffset;
   }
   return Math.floor(unixSec / sec) * sec;
-}
-
-function getInstrumentSpec(symbol, price = 1) {
-  const s = String(symbol || '').toUpperCase();
-  if (s.includes('XAU')) {
-    return { pipSize: 0.1, contractSize: 100, precision: 2, pipValuePerLot: 10 };
-  }
-  if (s.includes('XAG')) {
-    return { pipSize: 0.01, contractSize: 5000, precision: 3, pipValuePerLot: 50 };
-  }
-  if (s.includes('NAS100') || s.includes('SPX500') || s.includes('US30') || s.startsWith('@')) {
-    return { pipSize: 1.0, contractSize: 1, precision: 1, pipValuePerLot: 1 };
-  }
-  if (s.includes('BTC') || s.includes('ETH') || s.includes('SOL') || s.includes('BNB')) {
-    const pipSize = price >= 500 ? 1.0 : price >= 10 ? 0.1 : 0.01;
-    return {
-      pipSize,
-      contractSize: 1,
-      precision: price >= 100 ? 2 : 4,
-      pipValuePerLot: pipSize,
-    };
-  }
-  if (s.includes('JPY')) {
-    const px = Number.isFinite(price) && price > 10 ? price : 150;
-    return {
-      pipSize: 0.01,
-      contractSize: 100000,
-      precision: 3,
-      pipValuePerLot: (100000 * 0.01) / px,
-    };
-  }
-  // Standard FX (EUR_USD, GBP_USD, USD_CAD, etc.)
-  const isUsdBase = s.startsWith('USD_') || s.startsWith('USD/');
-  const px = Number.isFinite(price) && price > 0 ? price : 1;
-  return {
-    pipSize: 0.0001,
-    contractSize: 100000,
-    precision: 5,
-    pipValuePerLot: isUsdBase ? 10 / px : 10,
-  };
 }
 
 function escapeHtml(str) {
@@ -2022,8 +1983,23 @@ export class ReplayController {
 
   getSpreadPrice() {
     const bar = this.getCurrentBar();
-    const spec = getInstrumentSpec(this.session?.symbol, bar?.close || 1);
+    const spec = getInstrumentSpec(this.session?.symbol, bar?.close || 1, this.session?.source);
     return (Number(this.session?.spreadPips) || 0) * spec.pipSize;
+  }
+
+  getAccountInfo() {
+    if (!this.active || !this.session) return null;
+    const bar = this.getCurrentBar();
+    const rMode = this.rpRiskModeEl?.value || 'pct';
+    const rVal = Number.parseFloat(this.rpRiskValEl?.value);
+    return {
+      balance: this.session.balance || this.session.initialBalance,
+      symbol: this.session.symbol,
+      source: this.session.source,
+      display: this.session.display,
+      currentPrice: bar?.close ?? null,
+      riskPct: rMode === 'pct' && Number.isFinite(rVal) && rVal > 0 ? rVal : 1,
+    };
   }
 
   _setTicketSide(side) {
@@ -2064,7 +2040,7 @@ export class ReplayController {
   _computeTicketParams() {
     const bar = this.getCurrentBar();
     if (!this.session || !bar) return null;
-    const spec = getInstrumentSpec(this.session.symbol, bar.close);
+    const spec = getInstrumentSpec(this.session.symbol, bar.close, this.session.source);
     const spreadPrice = this.getSpreadPrice();
     const oType = this.rpOrderTypeEl?.value || 'market';
     const isBuy = this.ticketSide === 'buy';
@@ -2206,6 +2182,164 @@ export class ReplayController {
     this.saveSessionSoon();
   }
 
+  placeOrderFromPositionTool(drawing, { orderType = 'limit', pane = null } = {}) {
+    if (!this.active || !this.session || !drawing) return false;
+    if (pane && pane.state.symbol !== this.session.symbol) {
+      this.host.showToast(
+        t('pos.wrongSymTitle'),
+        t('pos.wrongSymBody', { display: this.session.display })
+      );
+      return false;
+    }
+    const bar = this.getCurrentBar();
+    if (!bar) return false;
+
+    const side = drawing.type === 'shortpos' ? 'sell' : 'buy';
+    const isBuy = side === 'buy';
+    const spec = getInstrumentSpec(this.session.symbol, bar.close, this.session.source);
+    const spreadHalf = this.getSpreadPrice() / 2;
+
+    const sl = Number.isFinite(Number(drawing.sl))
+      ? Number(Number(drawing.sl).toFixed(spec.precision))
+      : null;
+    const tp = Number.isFinite(Number(drawing.tp))
+      ? Number(Number(drawing.tp).toFixed(spec.precision))
+      : null;
+
+    let finalType = orderType === 'market' ? 'market' : orderType;
+    let entryPrice =
+      finalType === 'market'
+        ? Number((bar.close + (isBuy ? spreadHalf : -spreadHalf)).toFixed(spec.precision))
+        : Number(Number(drawing.p1?.price).toFixed(spec.precision));
+
+    if (!Number.isFinite(entryPrice)) return false;
+
+    // Auto-verify Limit vs Stop relative to current Replay close so order always executes cleanly
+    if (finalType !== 'market') {
+      if (isBuy) {
+        finalType = entryPrice > bar.close ? 'stop' : 'limit';
+      } else {
+        finalType = entryPrice < bar.close ? 'stop' : 'limit';
+      }
+    }
+
+    // Validate SL / TP orientation
+    if (isBuy && ((sl !== null && sl >= entryPrice) || (tp !== null && tp <= entryPrice))) {
+      this.host.showToast(t('pos.invalidLevelsTitle'), t('pos.invalidBuyLevels'));
+      return false;
+    }
+    if (!isBuy && ((sl !== null && sl <= entryPrice) || (tp !== null && tp >= entryPrice))) {
+      this.host.showToast(t('pos.invalidLevelsTitle'), t('pos.invalidSellLevels'));
+      return false;
+    }
+
+    const baseEq = this.session.balance || this.session.initialBalance;
+    const riskPct = Math.max(0.05, Number(drawing.riskPct) || 1);
+    const targetRiskUsd = (baseEq * riskPct) / 100;
+    const slPips =
+      sl !== null ? Math.max(0.1, Math.abs(entryPrice - sl) / spec.pipSize) : 25;
+    const lots = Math.max(
+      0.01,
+      Math.min(500, Number((targetRiskUsd / (slPips * spec.pipValuePerLot)).toFixed(2)))
+    );
+    const riskUsd = sl !== null ? slPips * spec.pipValuePerLot * lots : 0;
+    const nowTime = this.session.cursorTime;
+
+    if (finalType === 'market') {
+      const pos = {
+        id: `pos-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        symbol: this.session.symbol,
+        display: this.session.display,
+        side,
+        lots,
+        entryPrice,
+        entryTime: nowTime,
+        sl,
+        tp,
+        initialRiskUsd: riskUsd > 0 ? riskUsd : null,
+      };
+      this.session.positions.push(pos);
+      this._recordTradingDay(nowTime);
+      this._recordStep(
+        'order_fill',
+        `Market ${side.toUpperCase()} ${lots.toFixed(2)}`,
+        `Entry ${entryPrice.toFixed(spec.precision)}${sl !== null ? ` · SL ${sl.toFixed(spec.precision)}` : ''}${tp !== null ? ` · TP ${tp.toFixed(spec.precision)}` : ''}`,
+        { side, price: entryPrice, lots, sl, tp }
+      );
+      this.host.showToast(
+        t('pos.placedMarketTitle', { side: side.toUpperCase() }),
+        t('pos.placedBody', {
+          lots: lots.toFixed(2),
+          entry: entryPrice.toFixed(spec.precision),
+          sl: sl !== null ? sl.toFixed(spec.precision) : '—',
+          tp: tp !== null ? tp.toFixed(spec.precision) : '—',
+        })
+      );
+    } else {
+      const ord = {
+        id: `ord-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        symbol: this.session.symbol,
+        display: this.session.display,
+        orderType: finalType,
+        side,
+        lots,
+        price: entryPrice,
+        createdAt: nowTime,
+        sl,
+        tp,
+        initialRiskUsd: riskUsd > 0 ? riskUsd : null,
+      };
+      this.session.pendingOrders.push(ord);
+      this._recordStep(
+        'order_pending',
+        `${side.toUpperCase()} ${finalType.toUpperCase()} ${lots.toFixed(2)}`,
+        `Pending @ ${entryPrice.toFixed(spec.precision)}${sl !== null ? ` · SL ${sl.toFixed(spec.precision)}` : ''}${tp !== null ? ` · TP ${tp.toFixed(spec.precision)}` : ''}`,
+        { side, price: entryPrice, lots }
+      );
+      this.host.showToast(
+        t('pos.placedLimitTitle', { side: side.toUpperCase(), type: finalType.toUpperCase() }),
+        t('pos.placedBody', {
+          lots: lots.toFixed(2),
+          entry: entryPrice.toFixed(spec.precision),
+          sl: sl !== null ? sl.toFixed(spec.precision) : '—',
+          tp: tp !== null ? tp.toFixed(spec.precision) : '—',
+        })
+      );
+    }
+
+    // Auto-remove the Long/Short tool box so ONLY the clean FXReplay horizontal Entry / SL / TP lines stay on the chart!
+    if (pane) {
+      pane.deleteDrawingById(drawing.id);
+    }
+
+    this._updateAllUi();
+    this.saveSessionSoon();
+    return true;
+  }
+
+  closeOrClearFromChart(kind, id, field) {
+    if (!this.session) return;
+    if (kind === 'order') {
+      if (field === 'price') {
+        this.cancelPendingOrder(id);
+        return;
+      }
+      const ord = this.session.pendingOrders.find((o) => o.id === id);
+      if (!ord) return;
+      ord[field] = null;
+    } else if (kind === 'position') {
+      if (field === 'entry') {
+        this.closePosition(id, 1, null, 'Manual');
+        return;
+      }
+      const pos = this.session.positions.find((p) => p.id === id);
+      if (!pos) return;
+      pos[field] = null;
+    }
+    this._updateAllUi();
+    this.saveSessionSoon();
+  }
+
   modifyOrderOnChart(kind, id, field, newPrice) {
     if (!this.session || !Number.isFinite(newPrice)) return;
     if (kind === 'position') {
@@ -2241,7 +2375,7 @@ export class ReplayController {
     if (idx === -1) return;
     const pos = this.session.positions[idx];
     const bar = this.getCurrentBar();
-    const spec = getInstrumentSpec(this.session.symbol, bar?.close || pos.entryPrice);
+    const spec = getInstrumentSpec(this.session.symbol, bar?.close || pos.entryPrice, this.session.source);
     const spreadPrice = this.getSpreadPrice();
     const isBuy = pos.side === 'buy';
 
@@ -2414,7 +2548,7 @@ export class ReplayController {
   computePositionPnl(pos, midPrice = null) {
     const bar = this.getCurrentBar();
     const mid = Number.isFinite(midPrice) ? midPrice : bar?.close || pos.entryPrice;
-    const spec = getInstrumentSpec(this.session?.symbol, mid);
+    const spec = getInstrumentSpec(this.session?.symbol, mid, this.session?.source);
     const spreadHalf = this.getSpreadPrice() / 2;
     const isBuy = pos.side === 'buy';
     const exitPrice = mid + (isBuy ? -spreadHalf : spreadHalf);
@@ -2519,9 +2653,20 @@ export class ReplayController {
       ...pos,
       ...this.computePositionPnl(pos),
     }));
+    const orders = this.session.pendingOrders.map((ord) => {
+      const spec = getInstrumentSpec(this.session.symbol, ord.price, this.session.source);
+      const slUsd = Number.isFinite(ord.sl)
+        ? (Math.abs(ord.price - ord.sl) / spec.pipSize) * spec.pipValuePerLot * ord.lots
+        : null;
+      const tpUsd = Number.isFinite(ord.tp)
+        ? (Math.abs(ord.tp - ord.price) / spec.pipSize) * spec.pipValuePerLot * ord.lots
+        : null;
+      const rr = slUsd && tpUsd ? tpUsd / slUsd : null;
+      return { ...ord, slUsd, tpUsd, rr };
+    });
     pane.setReplayOverlays({
       positions,
-      orders: this.session.pendingOrders,
+      orders,
       markers: this.session.trades,
     });
   }

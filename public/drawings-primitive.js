@@ -12,34 +12,123 @@
  *  - freehand: { id, type:'freehand', points:[{time,price},...], color, width, dashed, text }
  */
 
-function getPosInstrumentSpec(symbol, price = 1) {
-  const s = String(symbol || '').toUpperCase();
-  if (s.includes('XAU')) return { pipSize: 0.1, pipValuePerLot: 10 };
-  if (s.includes('XAG')) return { pipSize: 0.01, pipValuePerLot: 50 };
-  if (s.includes('DXY') || s.includes('DX')) return { pipSize: 0.01, pipValuePerLot: 10 };
-  if (s.includes('NAS100') || s.includes('SPX500') || s.includes('US30') || s.startsWith('@')) {
-    return { pipSize: 1.0, pipValuePerLot: 1 };
+export function getInstrumentSpec(symbol, price = 1, source = '') {
+  const s = String(symbol || '').toUpperCase().trim();
+  const src = String(source || '').toLowerCase();
+  const root = s
+    .replace(/\.[VCN]\.\d+$/i, '')
+    .replace(/1!$|2!$/i, '')
+    .replace(/^@|#$/g, '');
+  const isFutures =
+    src === 'databento' ||
+    src === 'cme' ||
+    /\.[VCN]\.\d+$/i.test(s) ||
+    /1!$|2!$/i.test(s) ||
+    s.startsWith('@');
+
+  // 1. Official CME / COMEX / NYMEX Futures multipliers
+  if (root === 'NQ') return { pipSize: 1.0, contractSize: 20, precision: 2, pipValuePerLot: 20, unit: 'cts' };
+  if (root === 'MNQ') return { pipSize: 1.0, contractSize: 2, precision: 2, pipValuePerLot: 2, unit: 'cts' };
+  if (root === 'ES') return { pipSize: 1.0, contractSize: 50, precision: 2, pipValuePerLot: 50, unit: 'cts' };
+  if (root === 'MES') return { pipSize: 1.0, contractSize: 5, precision: 2, pipValuePerLot: 5, unit: 'cts' };
+  if (root === 'YM') return { pipSize: 1.0, contractSize: 5, precision: 0, pipValuePerLot: 5, unit: 'cts' };
+  if (root === 'MYM') return { pipSize: 1.0, contractSize: 0.5, precision: 0, pipValuePerLot: 0.5, unit: 'cts' };
+  if (root === 'RTY') return { pipSize: 1.0, contractSize: 50, precision: 2, pipValuePerLot: 50, unit: 'cts' };
+  if (root === 'M2K') return { pipSize: 1.0, contractSize: 5, precision: 2, pipValuePerLot: 5, unit: 'cts' };
+  if (root === 'GC' || root === 'QGC') return { pipSize: 0.1, contractSize: 100, precision: 2, pipValuePerLot: 10, unit: 'cts' };
+  if (root === 'MGC') return { pipSize: 0.1, contractSize: 10, precision: 2, pipValuePerLot: 1, unit: 'cts' };
+  if (root === 'SI' || root === 'QSI') return { pipSize: 0.01, contractSize: 5000, precision: 3, pipValuePerLot: 50, unit: 'cts' };
+  if (root === 'CL' || root === 'QCL' || root === 'BZ') {
+    return { pipSize: 0.01, contractSize: 1000, precision: 2, pipValuePerLot: 10, unit: 'cts' };
   }
-  if (s.includes('BTC') || s.includes('ETH') || s.includes('SOL') || s.includes('BNB')) {
+  if (root === 'MCL') return { pipSize: 0.01, contractSize: 100, precision: 2, pipValuePerLot: 1, unit: 'cts' };
+  if (root === '6E' || root === 'EU') return { pipSize: 0.0001, contractSize: 125000, precision: 5, pipValuePerLot: 12.5, unit: 'cts' };
+  if (root === 'M6E') return { pipSize: 0.0001, contractSize: 12500, precision: 5, pipValuePerLot: 1.25, unit: 'cts' };
+  if (root === '6B' || root === 'BP') return { pipSize: 0.0001, contractSize: 62500, precision: 5, pipValuePerLot: 6.25, unit: 'cts' };
+  if (root === '6A' || root === 'AD') return { pipSize: 0.0001, contractSize: 100000, precision: 5, pipValuePerLot: 10, unit: 'cts' };
+  if (root === '6C' || root === 'CD') return { pipSize: 0.0001, contractSize: 100000, precision: 5, pipValuePerLot: 10, unit: 'cts' };
+  if (root === '6S' || root === 'SF') return { pipSize: 0.0001, contractSize: 125000, precision: 5, pipValuePerLot: 12.5, unit: 'cts' };
+  if (root === '6J' || root === 'JY') return { pipSize: 0.000001, contractSize: 12500000, precision: 6, pipValuePerLot: 12.5, unit: 'cts' };
+  if (isFutures && root === 'BTC') return { pipSize: 1.0, contractSize: 5, precision: 2, pipValuePerLot: 5, unit: 'cts' };
+  if (isFutures && root === 'MBT') return { pipSize: 1.0, contractSize: 0.1, precision: 2, pipValuePerLot: 0.1, unit: 'cts' };
+  if (isFutures && root === 'ETH') return { pipSize: 1.0, contractSize: 50, precision: 2, pipValuePerLot: 50, unit: 'cts' };
+  if (isFutures && root === 'MET') return { pipSize: 1.0, contractSize: 0.1, precision: 2, pipValuePerLot: 0.1, unit: 'cts' };
+
+  // 2. Spot Metals CFDs (OANDA)
+  if (s.includes('XAU')) return { pipSize: 0.1, contractSize: 100, precision: 2, pipValuePerLot: 10, unit: 'lots' };
+  if (s.includes('XAG')) return { pipSize: 0.01, contractSize: 5000, precision: 3, pipValuePerLot: 50, unit: 'lots' };
+
+  // 3. Oil CFDs (OANDA WTICO_USD, BCO_USD — 100 bbl/lot standard FTMO/CFD)
+  if (s.includes('WTICO') || s.includes('BCO_') || s.includes('USOIL') || s.includes('UKOIL')) {
+    return { pipSize: 0.01, contractSize: 100, precision: 2, pipValuePerLot: 1, unit: 'lots' };
+  }
+
+  // 4. US Dollar Index (DXY)
+  if (root === 'DXY' || root === 'DX' || s.includes('DXY')) {
+    return { pipSize: 0.01, contractSize: 1000, precision: 3, pipValuePerLot: 10, unit: 'lots' };
+  }
+
+  // 5. Equity Index CFDs (OANDA NAS100_USD, SPX500_USD, US30_USD, etc.)
+  if (
+    s.includes('NAS100') ||
+    s.includes('SPX500') ||
+    s.includes('US30') ||
+    s.includes('US2000') ||
+    s.includes('DE30') ||
+    s.includes('UK100') ||
+    s.includes('JP225')
+  ) {
+    return { pipSize: 1.0, contractSize: 1, precision: 1, pipValuePerLot: 1, unit: 'lots' };
+  }
+
+  // 6. Spot / Perp Crypto (Binance BTCUSDT, ETHUSDT, SOLUSDT, etc.)
+  if (s.includes('BTC') || s.includes('ETH') || s.includes('SOL') || s.includes('BNB') || s.includes('XRP') || s.includes('ADA')) {
     const pipSize = price >= 500 ? 1.0 : price >= 10 ? 0.1 : 0.01;
-    return { pipSize, pipValuePerLot: pipSize };
+    return {
+      pipSize,
+      contractSize: 1,
+      precision: price >= 100 ? 2 : 4,
+      pipValuePerLot: pipSize,
+      unit: 'units',
+    };
   }
+
+  // 7. JPY FX Pairs
   if (s.includes('JPY')) {
     const px = Number.isFinite(price) && price > 10 ? price : 150;
-    return { pipSize: 0.01, pipValuePerLot: 1000 / px };
+    return {
+      pipSize: 0.01,
+      contractSize: 100000,
+      precision: 3,
+      pipValuePerLot: (100000 * 0.01) / px,
+      unit: 'lots',
+    };
   }
+
+  // 8. GBP-quoted Crosses (EUR_GBP)
+  if (s.endsWith('_GBP') || s.endsWith('/GBP')) {
+    return { pipSize: 0.0001, contractSize: 100000, precision: 5, pipValuePerLot: 12.7, unit: 'lots' };
+  }
+
+  // 9. Standard FX (EUR_USD, GBP_USD, AUD_USD, USD_CAD, USD_CHF)
   const isUsdBase = s.startsWith('USD_') || s.startsWith('USD/');
   const px = Number.isFinite(price) && price > 0 ? price : 1;
-  return { pipSize: 0.0001, pipValuePerLot: isUsdBase ? 10 / px : 10 };
+  return {
+    pipSize: 0.0001,
+    contractSize: 100000,
+    precision: 5,
+    pipValuePerLot: isUsdBase ? 10 / px : 10,
+    unit: 'lots',
+  };
 }
 
-export function computePositionToolMetrics(d, symbol) {
+export function computePositionToolMetrics(d, symbol, source = '') {
   const entry = Number(d?.p1?.price);
   const tp = Number(d?.tp);
   const sl = Number(d?.sl);
   const accountSize = Math.max(10, Number(d?.accountSize) || 100000);
   const riskPct = Math.max(0.05, Number(d?.riskPct) || 1);
-  const spec = getPosInstrumentSpec(symbol, entry || 1);
+  const spec = getInstrumentSpec(symbol, entry || 1, source);
   const slDist = Math.abs(entry - sl);
   const tpDist = Math.abs(tp - entry);
   const slPips = slDist / spec.pipSize;
@@ -62,6 +151,7 @@ export function computePositionToolMetrics(d, symbol) {
     rewardUsd,
     rewardPct,
     lots,
+    spec,
   };
 }
 
@@ -99,6 +189,85 @@ function drawCleanText(ctx, text, x, y, color, align = 'center', withPill = fals
   ctx.fillStyle = color || '#f8fafc';
   ctx.fillText(text, x, y);
   ctx.restore();
+}
+
+function drawReplayOrderTag(ctx, { qtyText, mainText, borderColor, textColor, rightX, y }) {
+  ctx.save();
+  ctx.font = '700 10.5px -apple-system, BlinkMacSystemFont, "Inter", sans-serif';
+  const qtyW = Math.max(20, ctx.measureText(qtyText).width + 10);
+  ctx.font = '600 10.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  const mainW = ctx.measureText(mainText).width + 14;
+  const closeW = 19;
+  const boxH = 20;
+  const totalW = qtyW + mainW + closeW;
+  const drawX = Math.max(6, rightX - totalW);
+  const drawY = y - boxH / 2;
+
+  // Dark sleek body (FXReplay / TradingView execution tag)
+  ctx.fillStyle = 'rgba(13, 18, 30, 0.93)';
+  ctx.beginPath();
+  ctx.roundRect(drawX, drawY, totalW, boxH, 4);
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = borderColor;
+  ctx.stroke();
+
+  // Left qty pill divider + text
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+  ctx.beginPath();
+  ctx.roundRect(drawX + 0.5, drawY + 0.5, qtyW - 0.5, boxH - 1, [3.5, 0, 0, 3.5]);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+  ctx.beginPath();
+  ctx.moveTo(drawX + qtyW, drawY + 1);
+  ctx.lineTo(drawX + qtyW, drawY + boxH - 1);
+  ctx.stroke();
+
+  ctx.font = '700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.fillStyle = '#e2e8f0';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(qtyText, drawX + qtyW / 2, y + 0.5);
+
+  // Center PnL / Order text
+  ctx.font = '600 10.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.fillStyle = textColor || '#e2e8f0';
+  ctx.textAlign = 'left';
+  ctx.fillText(mainText, drawX + qtyW + 7, y + 0.5);
+
+  // Right × close button divider + glyph
+  const sepX = drawX + qtyW + mainW;
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+  ctx.beginPath();
+  ctx.moveTo(sepX, drawY + 1);
+  ctx.lineTo(sepX, drawY + boxH - 1);
+  ctx.stroke();
+
+  ctx.font = '700 10.5px -apple-system, BlinkMacSystemFont, "Inter", sans-serif';
+  ctx.fillStyle = 'rgba(203, 213, 225, 0.85)';
+  ctx.textAlign = 'center';
+  ctx.fillText('×', sepX + closeW / 2, y + 0.5);
+  ctx.restore();
+
+  return {
+    pillRect: { x: drawX, y: drawY, w: totalW, h: boxH },
+    delRect: { x: sepX, y: drawY, w: closeW, h: boxH },
+  };
+}
+
+function fmtTagMoney(val, showPlus = false) {
+  const n = Number(val) || 0;
+  const sign = n < 0 ? '-' : showPlus && n >= 0 ? '+' : '';
+  return `${sign}$${Math.abs(n).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} USD`;
+}
+
+function fmtTagQty(lots) {
+  const n = Number(lots) || 0;
+  return Math.abs(n - Math.round(n)) < 0.005 ? String(Math.round(n)) : n.toFixed(2);
 }
 
 function drawAlertPill(ctx, text, x, y, color, align = 'left') {
@@ -278,6 +447,13 @@ export class DrawingsPrimitive {
     this.requestRedraw();
   }
 
+  setHoveredDrawingId(id) {
+    const next = id || null;
+    if (this._hoveredDrawingId === next) return;
+    this._hoveredDrawingId = next;
+    this.requestRedraw();
+  }
+
   hitTestAlert(px, py) {
     for (let i = this._alertHitBoxes.length - 1; i >= 0; i--) {
       const box = this._alertHitBoxes[i];
@@ -327,8 +503,26 @@ export class DrawingsPrimitive {
   hitTestReplayLine(px, py) {
     for (let i = this._replayLineHitBoxes.length - 1; i >= 0; i--) {
       const b = this._replayLineHitBoxes[i];
-      if (Math.abs(py - b.y) <= 7) {
-        return b;
+      if (
+        b.delRect &&
+        px >= b.delRect.x - 2 &&
+        px <= b.delRect.x + b.delRect.w + 2 &&
+        py >= b.delRect.y - 2 &&
+        py <= b.delRect.y + b.delRect.h + 2
+      ) {
+        return { ...b, onClose: true };
+      }
+      if (
+        b.pillRect &&
+        px >= b.pillRect.x - 2 &&
+        px <= b.pillRect.x + b.pillRect.w + 2 &&
+        py >= b.pillRect.y - 2 &&
+        py <= b.pillRect.y + b.pillRect.h + 2
+      ) {
+        return { ...b, onClose: false };
+      }
+      if (b.draggable && Math.abs(py - b.y) <= 7) {
+        return { ...b, onClose: false };
       }
     }
     return null;
@@ -577,122 +771,200 @@ export class DrawingsPrimitive {
         }
       }
 
-      // Open Positions: R:R zones + Entry / Draggable SL / Draggable TP lines
+      // Open Positions: ultra-clean FXReplay horizontal Entry / SL / TP lines + sleek right-edge pill tags with ×
       for (const pos of this._replayPositions) {
         const yEntry = this.priceToY(pos.entryPrice);
         if (yEntry === null) continue;
         const ySl = Number.isFinite(pos.sl) ? this.priceToY(pos.sl) : null;
         const yTp = Number.isFinite(pos.tp) ? this.priceToY(pos.tp) : null;
-        const xStartRaw = this.timeToX(pos.entryTime);
-        const zoneLeft = xStartRaw !== null ? Math.max(0, Math.min(width - 40, xStartRaw)) : 0;
-        const zoneWidth = Math.max(40, width - zoneLeft);
-
-        if (yTp !== null) {
-          ctx.fillStyle = 'rgba(34, 197, 94, 0.08)';
-          ctx.fillRect(zoneLeft, Math.min(yEntry, yTp), zoneWidth, Math.abs(yTp - yEntry));
-        }
-        if (ySl !== null) {
-          ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
-          ctx.fillRect(zoneLeft, Math.min(yEntry, ySl), zoneWidth, Math.abs(ySl - yEntry));
-        }
-
-        // Entry line
+        const qtyText = fmtTagQty(pos.lots);
         const isLong = pos.side === 'buy';
-        const entryColor = isLong ? '#38bdf8' : '#f472b6';
+
+        // Entry horizontal line (solid blue for Buy, rose for Sell)
+        const entryColor = isLong ? '#3b82f6' : '#f43f5e';
         ctx.strokeStyle = entryColor;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.25;
         ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.moveTo(zoneLeft, yEntry);
+        ctx.moveTo(0, yEntry);
         ctx.lineTo(width, yEntry);
         ctx.stroke();
 
         const pnlVal = Number(pos.floatingPnl || 0);
-        const pnlSign = pnlVal >= 0 ? '+' : '-';
-        const rTxt = Number.isFinite(pos.floatingR)
-          ? ` (${pos.floatingR >= 0 ? '+' : ''}${pos.floatingR.toFixed(2)}R)`
-          : '';
-        const entryLbl = `${isLong ? 'LONG' : 'SHORT'} ${pos.lots.toFixed(2)} · ${pnlSign}$${Math.abs(pnlVal).toFixed(0)}${rTxt}`;
-        drawAlertPill(ctx, entryLbl, width - 8, yEntry - 11, pnlVal >= 0 ? '#4ade80' : '#f87171', 'right');
+        const entryTag = drawReplayOrderTag(ctx, {
+          qtyText,
+          mainText: fmtTagMoney(pnlVal, true),
+          borderColor: entryColor,
+          textColor: pnlVal >= 0 ? '#4ade80' : '#f87171',
+          rightX: width - 6,
+          y: yEntry,
+        });
+        this._replayLineHitBoxes.push({
+          kind: 'position',
+          id: pos.id,
+          field: 'entry',
+          y: yEntry,
+          draggable: false,
+          ...entryTag,
+        });
 
-        // TP Line (draggable)
+        // TP horizontal dashed green line (draggable + × to clear TP)
         if (yTp !== null) {
-          ctx.strokeStyle = '#22c55e';
-          ctx.lineWidth = 1.35;
-          ctx.setLineDash([5, 4]);
+          ctx.strokeStyle = 'rgba(34, 197, 94, 0.78)';
+          ctx.lineWidth = 1.1;
+          ctx.setLineDash([4, 4]);
           ctx.beginPath();
-          ctx.moveTo(zoneLeft, yTp);
+          ctx.moveTo(0, yTp);
           ctx.lineTo(width, yTp);
           ctx.stroke();
           ctx.setLineDash([]);
-          const tpTxt = Number.isFinite(pos.tpUsd)
-            ? `TP  +$${Math.abs(pos.tpUsd).toFixed(0)}${Number.isFinite(pos.rr) ? ` (${pos.rr.toFixed(1)}R)` : ''} · ${pos.tp.toFixed(precision)}`
-            : `TP  ${pos.tp.toFixed(precision)}`;
-          drawAlertPill(ctx, tpTxt, width - 8, yTp - 11, '#4ade80', 'right');
-          this._replayLineHitBoxes.push({ kind: 'position', id: pos.id, field: 'tp', y: yTp });
+          const tpMain = Number.isFinite(pos.tpUsd)
+            ? fmtTagMoney(Math.abs(pos.tpUsd), true)
+            : `TP ${pos.tp.toFixed(precision)}`;
+          const tpTag = drawReplayOrderTag(ctx, {
+            qtyText,
+            mainText: tpMain,
+            borderColor: 'rgba(34, 197, 94, 0.85)',
+            textColor: '#4ade80',
+            rightX: width - 6,
+            y: yTp,
+          });
+          this._replayLineHitBoxes.push({
+            kind: 'position',
+            id: pos.id,
+            field: 'tp',
+            y: yTp,
+            draggable: true,
+            ...tpTag,
+          });
         }
 
-        // SL Line (draggable)
+        // SL horizontal dashed amber/red line (draggable + × to clear SL)
         if (ySl !== null) {
-          ctx.strokeStyle = '#ef4444';
-          ctx.lineWidth = 1.35;
-          ctx.setLineDash([5, 4]);
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.82)';
+          ctx.lineWidth = 1.1;
+          ctx.setLineDash([4, 4]);
           ctx.beginPath();
-          ctx.moveTo(zoneLeft, ySl);
+          ctx.moveTo(0, ySl);
           ctx.lineTo(width, ySl);
           ctx.stroke();
           ctx.setLineDash([]);
-          const slTxt = Number.isFinite(pos.slUsd)
-            ? `SL  -$${Math.abs(pos.slUsd).toFixed(0)} · ${pos.sl.toFixed(precision)}`
-            : `SL  ${pos.sl.toFixed(precision)}`;
-          drawAlertPill(ctx, slTxt, width - 8, ySl - 11, '#f87171', 'right');
-          this._replayLineHitBoxes.push({ kind: 'position', id: pos.id, field: 'sl', y: ySl });
+          const slMain = Number.isFinite(pos.slUsd)
+            ? fmtTagMoney(-Math.abs(pos.slUsd), false)
+            : `SL ${pos.sl.toFixed(precision)}`;
+          const slTag = drawReplayOrderTag(ctx, {
+            qtyText,
+            mainText: slMain,
+            borderColor: 'rgba(245, 158, 11, 0.85)',
+            textColor: '#fbbf24',
+            rightX: width - 6,
+            y: ySl,
+          });
+          this._replayLineHitBoxes.push({
+            kind: 'position',
+            id: pos.id,
+            field: 'sl',
+            y: ySl,
+            draggable: true,
+            ...slTag,
+          });
         }
       }
 
-      // Pending Orders (Limit / Stop) — draggable entry, SL & TP
+      // Pending Orders (Limit / Stop) — ultra-clean FXReplay horizontal Entry / SL / TP lines + × cancel/clear
       for (const ord of this._replayOrders) {
         const yOrd = this.priceToY(ord.price);
         if (yOrd === null) continue;
-        const ordColor = ord.side === 'buy' ? '#22d3ee' : '#fb923c';
+        const qtyText = fmtTagQty(ord.lots);
+        const ordColor = ord.side === 'buy' ? '#3b82f6' : '#f43f5e';
         ctx.strokeStyle = ordColor;
-        ctx.lineWidth = 1.35;
-        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 1.25;
+        ctx.setLineDash([5, 4]);
         ctx.beginPath();
         ctx.moveTo(0, yOrd);
         ctx.lineTo(width, yOrd);
         ctx.stroke();
         ctx.setLineDash([]);
-        const lbl = `${ord.side.toUpperCase()} ${ord.orderType.toUpperCase()} ${ord.lots.toFixed(2)} @ ${ord.price.toFixed(precision)}`;
-        drawAlertPill(ctx, lbl, width - 8, yOrd - 11, ordColor, 'right');
-        this._replayLineHitBoxes.push({ kind: 'order', id: ord.id, field: 'price', y: yOrd });
+        const ordMain = `${ord.side.toUpperCase()} ${ord.orderType.toUpperCase()} · ${ord.price.toFixed(precision)}`;
+        const ordTag = drawReplayOrderTag(ctx, {
+          qtyText,
+          mainText: ordMain,
+          borderColor: ordColor,
+          textColor: '#93c5fd',
+          rightX: width - 6,
+          y: yOrd,
+        });
+        this._replayLineHitBoxes.push({
+          kind: 'order',
+          id: ord.id,
+          field: 'price',
+          y: yOrd,
+          draggable: true,
+          ...ordTag,
+        });
 
         if (Number.isFinite(ord.tp)) {
           const yTp = this.priceToY(ord.tp);
           if (yTp !== null) {
-            ctx.strokeStyle = 'rgba(34, 197, 94, 0.7)';
-            ctx.setLineDash([3, 4]);
+            ctx.strokeStyle = 'rgba(34, 197, 94, 0.78)';
+            ctx.lineWidth = 1.1;
+            ctx.setLineDash([4, 4]);
             ctx.beginPath();
             ctx.moveTo(0, yTp);
             ctx.lineTo(width, yTp);
             ctx.stroke();
             ctx.setLineDash([]);
-            drawAlertPill(ctx, `TP ${ord.tp.toFixed(precision)}`, width - 8, yTp - 10, '#4ade80', 'right');
-            this._replayLineHitBoxes.push({ kind: 'order', id: ord.id, field: 'tp', y: yTp });
+            const tpMain = Number.isFinite(ord.tpUsd)
+              ? fmtTagMoney(Math.abs(ord.tpUsd), true)
+              : `TP ${ord.tp.toFixed(precision)}`;
+            const tpTag = drawReplayOrderTag(ctx, {
+              qtyText,
+              mainText: tpMain,
+              borderColor: 'rgba(34, 197, 94, 0.85)',
+              textColor: '#4ade80',
+              rightX: width - 6,
+              y: yTp,
+            });
+            this._replayLineHitBoxes.push({
+              kind: 'order',
+              id: ord.id,
+              field: 'tp',
+              y: yTp,
+              draggable: true,
+              ...tpTag,
+            });
           }
         }
         if (Number.isFinite(ord.sl)) {
           const ySl = this.priceToY(ord.sl);
           if (ySl !== null) {
-            ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
-            ctx.setLineDash([3, 4]);
+            ctx.strokeStyle = 'rgba(245, 158, 11, 0.82)';
+            ctx.lineWidth = 1.1;
+            ctx.setLineDash([4, 4]);
             ctx.beginPath();
             ctx.moveTo(0, ySl);
             ctx.lineTo(width, ySl);
             ctx.stroke();
             ctx.setLineDash([]);
-            drawAlertPill(ctx, `SL ${ord.sl.toFixed(precision)}`, width - 8, ySl - 10, '#f87171', 'right');
-            this._replayLineHitBoxes.push({ kind: 'order', id: ord.id, field: 'sl', y: ySl });
+            const slMain = Number.isFinite(ord.slUsd)
+              ? fmtTagMoney(-Math.abs(ord.slUsd), false)
+              : `SL ${ord.sl.toFixed(precision)}`;
+            const slTag = drawReplayOrderTag(ctx, {
+              qtyText,
+              mainText: slMain,
+              borderColor: 'rgba(245, 158, 11, 0.85)',
+              textColor: '#fbbf24',
+              rightX: width - 6,
+              y: ySl,
+            });
+            this._replayLineHitBoxes.push({
+              kind: 'order',
+              id: ord.id,
+              field: 'sl',
+              y: ySl,
+              draggable: true,
+              ...slTag,
+            });
           }
         }
       }
@@ -928,7 +1200,7 @@ export class DrawingsPrimitive {
       const left = Math.min(x1, x2);
       const right = Math.max(x1, x2);
       const boxW = Math.max(24, right - left);
-      const m = computePositionToolMetrics(d, this.paneRef.state?.symbol);
+      const m = computePositionToolMetrics(d, this.paneRef.state?.symbol, this.paneRef.state?.source);
 
       // Green Profit Zone (Entry <-> TP)
       const tpTop = Math.min(yEntry, yTp);
@@ -956,27 +1228,30 @@ export class DrawingsPrimitive {
       ctx.lineTo(left + boxW, yEntry);
       ctx.stroke();
 
-      // Compact inline R:R & Lot labels inside/along zones
+      // Compact inline R:R & Lot / TP / SL labels ONLY on mouse hover (keeps chart ultra-clean like TradingView!)
       const midX = left + boxW / 2;
       const isLong = d.type === 'longpos';
-      const centerLbl = `${isLong ? 'LONG' : 'SHORT'} · ${m.rr.toFixed(2)}R · ${m.lots.toFixed(2)} lot`;
-      drawAlertPill(ctx, centerLbl, midX - Math.min(boxW / 2, 70), yEntry, '#e2e8f0', 'left');
-      drawCleanText(
-        ctx,
-        `TP +${m.tpPips.toFixed(1)}p (+$${Math.round(m.rewardUsd).toLocaleString()})`,
-        midX,
-        yTp + (isLong ? -9 : 10),
-        '#4ade80',
-        'center'
-      );
-      drawCleanText(
-        ctx,
-        `SL -${m.slPips.toFixed(1)}p (-$${Math.round(m.riskUsd).toLocaleString()})`,
-        midX,
-        ySl + (isLong ? 10 : -9),
-        '#f87171',
-        'center'
-      );
+      if (this._hoveredDrawingId === d.id) {
+        const unitLbl = m.spec?.unit || 'lot';
+        const centerLbl = `${isLong ? 'LONG' : 'SHORT'} · ${m.rr.toFixed(2)}R · ${m.lots.toFixed(2)} ${unitLbl}`;
+        drawAlertPill(ctx, centerLbl, midX - Math.min(boxW / 2, 70), yEntry, '#e2e8f0', 'left');
+        drawCleanText(
+          ctx,
+          `TP +${m.tpPips.toFixed(1)}p (+$${Math.round(m.rewardUsd).toLocaleString()})`,
+          midX,
+          yTp + (isLong ? -9 : 10),
+          '#4ade80',
+          'center'
+        );
+        drawCleanText(
+          ctx,
+          `SL -${m.slPips.toFixed(1)}p (-$${Math.round(m.riskUsd).toLocaleString()})`,
+          midX,
+          ySl + (isLong ? 10 : -9),
+          '#f87171',
+          'center'
+        );
+      }
 
       if (isSelected) {
         drawHandle(ctx, midX, yTp, '#22c55e');

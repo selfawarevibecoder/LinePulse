@@ -1,0 +1,28 @@
+# Secrets & local environment (NEVER commit!)
+.env
+.env.*
+!.env.example
+
+# Local user data, drawings, alerts, sessions & offline market archives (NEVER commit!)
+data/
+desktop/seed-archive/
+desktop/seed-archive-full/
+desktop/seed-personal/
+desktop/app-bundle/
+
+# Build outputs & packaged binaries
+dist/
+dist-desktop/
+*.dmg
+*.dmg.blockmap
+*.exe
+*.AppImage
+*.zip
+*.gz
+
+# Dependencies & OS files
+node_modules/
+desktop/node_modules/
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,58 @@
+{
+  "name": "linepulse-desktop",
+  "productName": "LinePulse",
+  "version": "1.3.0",
+  "description": "LinePulse — Multi-Screen Live Trading Charts & FXReplay Backtest",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "sync": "node sync-assets.mjs",
+    "dev": "LINEPULSE_PERSONAL_DEV=1 electron .",
+    "dev:clean": "electron .",
+    "build:mac": "node sync-assets.mjs && electron-builder --mac",
+    "build:mac:public": "node sync-assets.mjs && electron-builder --mac dmg --config.artifactName='LinePulse-${version}-Public-${arch}.${ext}'",
+    "build:mac:personal": "node sync-assets.mjs --personal && electron-builder --mac dmg --config.artifactName='LinePulse-${version}-Personal-DO-NOT-SHARE-${arch}.${ext}' && node sync-assets.mjs",
+    "build:win": "node sync-assets.mjs && electron-builder --win",
+    "build:win:zip": "node sync-assets.mjs && electron-builder --win zip --x64",
+    "build:linux": "node sync-assets.mjs && electron-builder --linux",
+    "build:all": "node sync-assets.mjs && electron-builder -mwl"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.linepulse.trader",
+    "productName": "LinePulse",
+    "directories": {
+      "output": "../dist-desktop"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "package.json",
+      "app-bundle/**/*"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "linux": {
+      "category": "Finance",
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}

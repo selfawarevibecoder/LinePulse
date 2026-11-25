@@ -1,0 +1,167 @@
+export const CURATED_SYMBOLS = [
+  // OANDA — Real-time Forex, Metals & Index CFDs (requires user's free OANDA Practice/Live key)
+  { symbol: 'XAU_USD', display: 'XAU/USD', name: 'Gold / US Dollar', source: 'oanda', exchange: 'OANDA', category: 'Metal', precision: 2 },
+  { symbol: 'DXY', display: 'DXY', name: 'US Dollar Index (ICE Synthetic — Live & 2015+ 1m)', source: 'oanda', exchange: 'OANDA', category: 'Index', precision: 3 },
+  { symbol: 'EUR_USD', display: 'EUR/USD', name: 'Euro / US Dollar', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 5 },
+  { symbol: 'GBP_USD', display: 'GBP/USD', name: 'British Pound / US Dollar', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 5 },
+  { symbol: 'USD_CAD', display: 'USD/CAD', name: 'US Dollar / Canadian Dollar', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 5 },
+  { symbol: 'NAS100_USD', display: 'NAS100', name: 'US Nasdaq 100 CFD', source: 'oanda', exchange: 'OANDA', category: 'Index', precision: 1 },
+  { symbol: 'EUR_GBP', display: 'EUR/GBP', name: 'Euro / British Pound', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 5 },
+  { symbol: 'SPX500_USD', display: 'SPX500', name: 'US S&P 500 CFD', source: 'oanda', exchange: 'OANDA', category: 'Index', precision: 1 },
+  { symbol: 'US30_USD', display: 'US30', name: 'US Wall St 30 CFD', source: 'oanda', exchange: 'OANDA', category: 'Index', precision: 1 },
+  { symbol: 'USD_JPY', display: 'USD/JPY', name: 'US Dollar / Japanese Yen', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 3 },
+  { symbol: 'AUD_USD', display: 'AUD/USD', name: 'Australian Dollar / US Dollar', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 5 },
+  { symbol: 'USD_CHF', display: 'USD/CHF', name: 'US Dollar / Swiss Franc', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 5 },
+  { symbol: 'NZD_USD', display: 'NZD/USD', name: 'New Zealand Dollar / US Dollar', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 5 },
+  { symbol: 'EUR_JPY', display: 'EUR/JPY', name: 'Euro / Japanese Yen', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 3 },
+  { symbol: 'GBP_JPY', display: 'GBP/JPY', name: 'British Pound / Japanese Yen', source: 'oanda', exchange: 'OANDA', category: 'Forex', precision: 3 },
+  { symbol: 'XAG_USD', display: 'XAG/USD', name: 'Silver / US Dollar', source: 'oanda', exchange: 'OANDA', category: 'Metal', precision: 4 },
+  { symbol: 'WTICO_USD', display: 'WTI Oil', name: 'West Texas Oil CFD', source: 'oanda', exchange: 'OANDA', category: 'Energy', precision: 3 },
+  { symbol: 'BCO_USD', display: 'Brent Oil', name: 'Brent Crude Oil CFD', source: 'oanda', exchange: 'OANDA', category: 'Energy', precision: 3 },
+  { symbol: 'DE30_EUR', display: 'DE40', name: 'Germany 40 CFD', source: 'oanda', exchange: 'OANDA', category: 'Index', precision: 1 },
+  { symbol: 'BTC_USD', display: 'BTC/USD', name: 'Bitcoin CFD', source: 'oanda', exchange: 'OANDA', category: 'Crypto', precision: 1 },
+
+  // CME Group Futures & Major Indices (100% Free — No API Key)
+  { symbol: '@ND.1', display: 'NQ1!', name: 'E-mini Nasdaq-100 Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 2 },
+  { symbol: '@SP.1', display: 'ES1!', name: 'E-mini S&P 500 Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 2 },
+  { symbol: '@GC.1', display: 'GC1!', name: 'COMEX Gold Futures', source: 'cme', exchange: 'CME/COMEX', category: 'Futures', precision: 2 },
+  { symbol: '@URO.1', display: '6E1!', name: 'CME Euro FX Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 5 },
+  { symbol: '@BP.1', display: '6B1!', name: 'CME British Pound Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 5 },
+  { symbol: '@CD.1', display: '6C1!', name: 'CME Canadian Dollar Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 5 },
+  { symbol: '@JY.1', display: '6J1!', name: 'CME Japanese Yen Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 6 },
+  { symbol: '@AD.1', display: '6A1!', name: 'CME Australian Dollar Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 5 },
+  { symbol: '@SF.1', display: '6S1!', name: 'CME Swiss Franc Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 5 },
+  { symbol: '@DJ.1', display: 'YM1!', name: 'CBOT Mini Dow Jones Futures', source: 'cme', exchange: 'CME/CBOT', category: 'Futures', precision: 1 },
+  { symbol: '@CL.1', display: 'CL1!', name: 'NYMEX WTI Crude Oil Futures', source: 'cme', exchange: 'CME/NYMEX', category: 'Futures', precision: 2 },
+  { symbol: '@SI.1', display: 'SI1!', name: 'COMEX Silver Futures', source: 'cme', exchange: 'CME/COMEX', category: 'Futures', precision: 3 },
+  { symbol: '@HG.1', display: 'HG1!', name: 'COMEX Copper Futures', source: 'cme', exchange: 'CME/COMEX', category: 'Futures', precision: 4 },
+  { symbol: '@NG.1', display: 'NG1!', name: 'NYMEX Natural Gas Futures', source: 'cme', exchange: 'CME/NYMEX', category: 'Futures', precision: 3 },
+  { symbol: '@PL.1', display: 'PL1!', name: 'NYMEX Platinum Futures', source: 'cme', exchange: 'CME/NYMEX', category: 'Futures', precision: 2 },
+  { symbol: '@US.1', display: 'ZB1!', name: 'CBOT 30-Year US Treasury Bond', source: 'cme', exchange: 'CME/CBOT', category: 'Futures', precision: 4 },
+  { symbol: '@TY.1', display: 'ZN1!', name: 'CBOT 10-Year US Treasury Note', source: 'cme', exchange: 'CME/CBOT', category: 'Futures', precision: 3 },
+  { symbol: '@BTC.1', display: 'BTC1!', name: 'CME Bitcoin Futures', source: 'cme', exchange: 'CME', category: 'Futures', precision: 1 },
+  { symbol: '@DX.1', display: 'DX1!', name: 'ICE US Dollar Index Futures', source: 'cme', exchange: 'ICE', category: 'Futures', precision: 3 },
+  { symbol: '.DXY', display: 'DXY', name: 'US Dollar Index Spot', source: 'cme', exchange: 'ICE', category: 'Index', precision: 3 },
+  { symbol: '@VX.1', display: 'VX1!', name: 'CBOE VIX Futures', source: 'cme', exchange: 'CBOE', category: 'Futures', precision: 2 },
+  { symbol: '@C.1', display: 'ZC1!', name: 'CBOT Corn Futures', source: 'cme', exchange: 'CME/CBOT', category: 'Futures', precision: 2 },
+  { symbol: '@S.1', display: 'ZS1!', name: 'CBOT Soybean Futures', source: 'cme', exchange: 'CME/CBOT', category: 'Futures', precision: 2 },
+  { symbol: '@W.1', display: 'ZW1!', name: 'CBOT Wheat Futures', source: 'cme', exchange: 'CME/CBOT', category: 'Futures', precision: 2 },
+
+  // BINANCE — 100% Free Real-Time 24/7 WebSocket (No API Key)
+  { symbol: 'BTCUSDT', display: 'BTCUSDT', name: 'Bitcoin / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 2 },
+  { symbol: 'ETHUSDT', display: 'ETHUSDT', name: 'Ethereum / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 2 },
+  { symbol: 'SOLUSDT', display: 'SOLUSDT', name: 'Solana / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 2 },
+  { symbol: 'XRPUSDT', display: 'XRPUSDT', name: 'XRP / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 4 },
+  { symbol: 'BNBUSDT', display: 'BNBUSDT', name: 'BNB / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 2 },
+  { symbol: 'PAXGUSDT', display: 'PAXGUSDT', name: 'PAX Gold Token / USDT (24/7 Gold)', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 2 },
+  { symbol: 'DOGEUSDT', display: 'DOGEUSDT', name: 'Dogecoin / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 5 },
+  { symbol: 'ADAUSDT', display: 'ADAUSDT', name: 'Cardano / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 4 },
+  { symbol: 'AVAXUSDT', display: 'AVAXUSDT', name: 'Avalanche / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 2 },
+  { symbol: 'LINKUSDT', display: 'LINKUSDT', name: 'Chainlink / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 3 },
+  { symbol: 'SUIUSDT', display: 'SUIUSDT', name: 'Sui / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 4 },
+  { symbol: 'LTCUSDT', display: 'LTCUSDT', name: 'Litecoin / TetherUS', source: 'binance', exchange: 'BINANCE', category: 'Crypto', precision: 2 },
+
+  // COINBASE — 100% Free Real-Time 24/7 WebSocket (No API Key)
+  { symbol: 'BTC-USD', display: 'BTC/USD', name: 'Bitcoin / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 2 },
+  { symbol: 'ETH-USD', display: 'ETH/USD', name: 'Ethereum / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 2 },
+  { symbol: 'SOL-USD', display: 'SOL/USD', name: 'Solana / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 2 },
+  { symbol: 'XRP-USD', display: 'XRP/USD', name: 'XRP / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 4 },
+  { symbol: 'DOGE-USD', display: 'DOGE/USD', name: 'Dogecoin / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 5 },
+  { symbol: 'ADA-USD', display: 'ADA/USD', name: 'Cardano / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 4 },
+  { symbol: 'AVAX-USD', display: 'AVAX/USD', name: 'Avalanche / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 2 },
+  { symbol: 'LINK-USD', display: 'LINK/USD', name: 'Chainlink / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 3 },
+  { symbol: 'LTC-USD', display: 'LTC/USD', name: 'Litecoin / US Dollar', source: 'coinbase', exchange: 'COINBASE', category: 'Crypto', precision: 2 },
+
+  // BYBIT — 100% Free Real-Time 24/7 WebSocket (No API Key)
+  { symbol: 'BTCUSDT', display: 'BTCUSDT', name: 'Bitcoin / TetherUS Spot', source: 'bybit', exchange: 'BYBIT', category: 'Crypto', precision: 2 },
+  { symbol: 'ETHUSDT', display: 'ETHUSDT', name: 'Ethereum / TetherUS Spot', source: 'bybit', exchange: 'BYBIT', category: 'Crypto', precision: 2 },
+  { symbol: 'SOLUSDT', display: 'SOLUSDT', name: 'Solana / TetherUS Spot', source: 'bybit', exchange: 'BYBIT', category: 'Crypto', precision: 2 },
+  { symbol: 'XRPUSDT', display: 'XRPUSDT', name: 'XRP / TetherUS Spot', source: 'bybit', exchange: 'BYBIT', category: 'Crypto', precision: 4 },
+  { symbol: 'DOGEUSDT', display: 'DOGEUSDT', name: 'Dogecoin / TetherUS Spot', source: 'bybit', exchange: 'BYBIT', category: 'Crypto', precision: 5 },
+  { symbol: 'SUIUSDT', display: 'SUIUSDT', name: 'Sui / TetherUS Spot', source: 'bybit', exchange: 'BYBIT', category: 'Crypto', precision: 4 },
+  { symbol: 'TONUSDT', display: 'TONUSDT', name: 'Toncoin / TetherUS Spot', source: 'bybit', exchange: 'BYBIT', category: 'Crypto', precision: 3 },
+
+  // KRAKEN — 100% Free Real-Time 24/7 WebSocket (No API Key)
+  { symbol: 'BTC/USD', display: 'BTC/USD', name: 'Bitcoin / US Dollar', source: 'kraken', exchange: 'KRAKEN', category: 'Crypto', precision: 1 },
+  { symbol: 'ETH/USD', display: 'ETH/USD', name: 'Ethereum / US Dollar', source: 'kraken', exchange: 'KRAKEN', category: 'Crypto', precision: 2 },
+  { symbol: 'SOL/USD', display: 'SOL/USD', name: 'Solana / US Dollar', source: 'kraken', exchange: 'KRAKEN', category: 'Crypto', precision: 2 },
+  { symbol: 'XRP/USD', display: 'XRP/USD', name: 'XRP / US Dollar', source: 'kraken', exchange: 'KRAKEN', category: 'Crypto', precision: 4 },
+  { symbol: 'ADA/USD', display: 'ADA/USD', name: 'Cardano / US Dollar', source: 'kraken', exchange: 'KRAKEN', category: 'Crypto', precision: 4 },
+  { symbol: 'PAXG/USD', display: 'PAXG/USD', name: 'PAX Gold / US Dollar', source: 'kraken', exchange: 'KRAKEN', category: 'Crypto', precision: 2 },
+
+  // US STOCKS & MAJOR ETFs (100% Free — No API Key)
+  { symbol: 'SPY', display: 'SPY', name: 'SPDR S&P 500 ETF Trust', source: 'stocks', exchange: 'NYSE/ETF', category: 'Stock', precision: 2 },
+  { symbol: 'QQQ', display: 'QQQ', name: 'Invesco QQQ (Nasdaq-100 ETF)', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'GLD', display: 'GLD', name: 'SPDR Gold Shares ETF', source: 'stocks', exchange: 'NYSE/ETF', category: 'Stock', precision: 2 },
+  { symbol: 'NVDA', display: 'NVDA', name: 'NVIDIA Corporation', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'AAPL', display: 'AAPL', name: 'Apple Inc.', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'MSFT', display: 'MSFT', name: 'Microsoft Corporation', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'TSLA', display: 'TSLA', name: 'Tesla Inc.', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'AMZN', display: 'AMZN', name: 'Amazon.com Inc.', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'META', display: 'META', name: 'Meta Platforms Inc.', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'GOOGL', display: 'GOOGL', name: 'Alphabet Inc.', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'AMD', display: 'AMD', name: 'Advanced Micro Devices', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'COIN', display: 'COIN', name: 'Coinbase Global Inc.', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+  { symbol: 'MSTR', display: 'MSTR', name: 'MicroStrategy Inc.', source: 'stocks', exchange: 'NASDAQ', category: 'Stock', precision: 2 },
+];
+
+export const CME_SYMBOL_ALIASES = {
+  'NQ=F': '@ND.1',
+  'NQ1!': '@ND.1',
+  NQ: '@ND.1',
+  'ES=F': '@SP.1',
+  'ES1!': '@SP.1',
+  ES: '@SP.1',
+  'GC=F': '@GC.1',
+  'GC1!': '@GC.1',
+  GC: '@GC.1',
+  '6E=F': '@URO.1',
+  '6E1!': '@URO.1',
+  '6E': '@URO.1',
+  '6B=F': '@BP.1',
+  '6B1!': '@BP.1',
+  '6B': '@BP.1',
+  '6C=F': '@CD.1',
+  '6C1!': '@CD.1',
+  '6C': '@CD.1',
+  '6J=F': '@JY.1',
+  '6J1!': '@JY.1',
+  '6J': '@JY.1',
+  'YM=F': '@DJ.1',
+  'YM1!': '@DJ.1',
+  YM: '@DJ.1',
+  'CL=F': '@CL.1',
+  'CL1!': '@CL.1',
+  CL: '@CL.1',
+  'SI=F': '@SI.1',
+  'SI1!': '@SI.1',
+  SI: '@SI.1',
+  'NG=F': '@NG.1',
+  'NG1!': '@NG.1',
+  NG: '@NG.1',
+  'ZB=F': '@US.1',
+  'ZB1!': '@US.1',
+  'ZN=F': '@TY.1',
+  'ZN1!': '@TY.1',
+  'BTC=F': '@BTC.1',
+  'BTC1!': '@BTC.1',
+  'DX-Y.NYB': '.DXY',
+  DXY: '.DXY',
+};
+
+export function resolveCmeSymbol(symbol) {
+  const up = String(symbol || '').trim().toUpperCase();
+  return CME_SYMBOL_ALIASES[up] || String(symbol || '').trim();
+}
+
+export function findCuratedSymbol(source, symbol) {
+  const normalized = source === 'cme' ? resolveCmeSymbol(symbol) : symbol;
+  return (
+    CURATED_SYMBOLS.find(
+      (s) =>
+        s.source === source &&
+        (s.symbol.toUpperCase() === normalized.toUpperCase() ||
+          s.display.toUpperCase() === String(symbol).toUpperCase())
+    ) || null
+  );
+}

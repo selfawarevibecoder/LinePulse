@@ -2327,6 +2327,50 @@ function formatNewsCountdown(unixSec, refNowSec = Math.floor(Date.now() / 1000))
   return isTr ? `${days}g ${hrs % 24}s` : `in ${days}d ${hrs % 24}h`;
 }
 
+let newsPastExpanded = false;
+
+function buildNewsCardEl(ev, { isPast, isFutureInReplay, nowSec, isTr }) {
+  const isMed = ev.impact !== 'High';
+  const card = document.createElement('div');
+  card.className = `news-card ${isMed ? 'impact-medium' : 'impact-high'} ${isPast ? 'is-past' : ''}`;
+  const flag = COUNTRY_FLAGS[ev.country] || '🌐';
+  const timeStr = formatNewsDateTime(ev.time, prefs.timezone);
+  const cdStr = formatNewsCountdown(ev.time, nowSec);
+
+  let actualCls = '';
+  if (!isFutureInReplay && ev.actualNum !== null && ev.forecastNum !== null) {
+    actualCls = ev.actualNum > ev.forecastNum ? 'beat' : ev.actualNum < ev.forecastNum ? 'miss' : '';
+  }
+  const actualTxt = isFutureInReplay
+    ? isTr
+      ? 'Bekleniyor'
+      : 'Pending'
+    : ev.actual || (isPast ? '—' : isTr ? 'Bekleniyor' : 'Pending');
+
+  card.innerHTML = `
+    <div class="news-card-top">
+      <span class="news-country-badge">
+        <span class="news-impact-dot"></span>
+        <span>${flag} ${escapeHtml(ev.country)}</span>
+      </span>
+      <span class="news-countdown">${escapeHtml(cdStr)}</span>
+    </div>
+    <div class="news-title">${escapeHtml(ev.title)}</div>
+    <div class="news-time-label">${escapeHtml(timeStr)}${ev.period ? ` · ${escapeHtml(ev.period)}` : ''}</div>
+    <div class="news-metrics">
+      <div><span>${isTr ? 'Açıklanan' : 'Actual'}</span><b class="${actualCls}">${escapeHtml(actualTxt)}</b></div>
+      <div><span>${isTr ? 'Beklenti' : 'Forecast'}</span><b>${escapeHtml(ev.forecast || '—')}</b></div>
+      <div><span>${isTr ? 'Önceki' : 'Previous'}</span><b>${escapeHtml(ev.previous || '—')}</b></div>
+    </div>
+  `;
+
+  card.addEventListener('click', () => {
+    panes.get(activePaneId)?.focusTime(ev.time, ev);
+  });
+
+  return card;
+}
+
 function renderNewsPanel() {
   const { inReplay, nowSec, sourceEvents } = getNewsContext();
   const isTr = getLang() === 'tr';
@@ -2379,48 +2423,53 @@ function renderNewsPanel() {
     return;
   }
 
+  const upcoming = [];
+  const past = [];
   for (const ev of items) {
-    const isPast = ev.time < nowSec - 60;
-    const isFutureInReplay = inReplay && ev.time > nowSec;
-    const isMed = ev.impact !== 'High';
-    const card = document.createElement('div');
-    card.className = `news-card ${isMed ? 'impact-medium' : 'impact-high'} ${isPast ? 'is-past' : ''}`;
-    const flag = COUNTRY_FLAGS[ev.country] || '🌐';
-    const timeStr = formatNewsDateTime(ev.time, prefs.timezone);
-    const cdStr = formatNewsCountdown(ev.time, nowSec);
+    if (ev.time < nowSec - 60) past.push(ev);
+    else upcoming.push(ev);
+  }
 
-    let actualCls = '';
-    if (!isFutureInReplay && ev.actualNum !== null && ev.forecastNum !== null) {
-      actualCls = ev.actualNum > ev.forecastNum ? 'beat' : ev.actualNum < ev.forecastNum ? 'miss' : '';
+  // Render upcoming events prominently first
+  if (upcoming.length > 0) {
+    for (const ev of upcoming) {
+      newsListEl.appendChild(
+        buildNewsCardEl(ev, { isPast: false, isFutureInReplay: inReplay && ev.time > nowSec, nowSec, isTr })
+      );
     }
-    const actualTxt = isFutureInReplay
-      ? isTr
-        ? 'Bekleniyor'
-        : 'Pending'
-      : ev.actual || (isPast ? '—' : isTr ? 'Bekleniyor' : 'Pending');
+  } else {
+    const doneBanner = document.createElement('div');
+    doneBanner.className = 'news-upcoming-empty';
+    doneBanner.textContent = isTr
+      ? 'Bu aralıkta yaklaşan yeni haber kalmadı.'
+      : 'No upcoming events remaining in this window.';
+    newsListEl.appendChild(doneBanner);
+  }
 
-    card.innerHTML = `
-      <div class="news-card-top">
-        <span class="news-country-badge">
-          <span class="news-impact-dot"></span>
-          <span>${flag} ${escapeHtml(ev.country)}</span>
-        </span>
-        <span class="news-countdown">${escapeHtml(cdStr)}</span>
-      </div>
-      <div class="news-title">${escapeHtml(ev.title)}</div>
-      <div class="news-time-label">${escapeHtml(timeStr)}${ev.period ? ` · ${escapeHtml(ev.period)}` : ''}</div>
-      <div class="news-metrics">
-        <div><span>${isTr ? 'Açıklanan' : 'Actual'}</span><b class="${actualCls}">${escapeHtml(actualTxt)}</b></div>
-        <div><span>${isTr ? 'Beklenti' : 'Forecast'}</span><b>${escapeHtml(ev.forecast || '—')}</b></div>
-        <div><span>${isTr ? 'Önceki' : 'Previous'}</span><b>${escapeHtml(ev.previous || '—')}</b></div>
-      </div>
-    `;
-
-    card.addEventListener('click', () => {
-      panes.get(activePaneId)?.focusTime(ev.time, ev);
+  // Tuck elapsed/past events cleanly into a collapsible dropdown (newest past event on top)
+  if (past.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'news-past-group';
+    details.open = newsPastExpanded;
+    details.addEventListener('toggle', () => {
+      newsPastExpanded = details.open;
     });
 
-    newsListEl.appendChild(card);
+    const summary = document.createElement('summary');
+    summary.className = 'news-past-summary';
+    summary.innerHTML = `<span>🕒 ${isTr ? 'Geçmiş Haberler' : 'Past Events'}</span><span class="news-past-count">${past.length}</span>`;
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'news-past-list';
+    for (let i = past.length - 1; i >= 0; i -= 1) {
+      const ev = past[i];
+      body.appendChild(
+        buildNewsCardEl(ev, { isPast: true, isFutureInReplay: false, nowSec, isTr })
+      );
+    }
+    details.appendChild(body);
+    newsListEl.appendChild(details);
   }
 }
 
@@ -3017,10 +3066,70 @@ async function openAlertsDialog(prefill = null) {
   }
 
   updateNotifyButtonLabel();
+  refreshMobilePushStatusBar();
   renderAlertsList();
   alertsDialog.showModal();
   await fetchAlertsFromServer();
 }
+
+async function refreshMobilePushStatusBar() {
+  const bar = document.getElementById('al-push-status-bar');
+  const txt = document.getElementById('al-push-status-text');
+  const testBtn = document.getElementById('al-test-push-btn');
+  if (!bar || !txt) return;
+  try {
+    const r = await fetch('/api/push/status', { cache: 'no-store' });
+    if (!r.ok) {
+      bar.hidden = true;
+      return;
+    }
+    const st = await r.json();
+    if (!st.configured) {
+      bar.hidden = true;
+      return;
+    }
+    bar.hidden = false;
+    const isTr = getLang() === 'tr';
+    if (st.deviceCount > 0) {
+      bar.classList.add('is-ready');
+      bar.classList.remove('is-waiting');
+      txt.textContent = isTr
+        ? `📱 Firebase Push: Aktif (${st.deviceCount} telefon kayıtlı — uygulama kapalıyken de gelir)`
+        : `📱 Firebase Push: Active (${st.deviceCount} device registered — works in background)`;
+      if (testBtn) testBtn.hidden = false;
+    } else {
+      bar.classList.remove('is-ready');
+      bar.classList.add('is-waiting');
+      txt.textContent = isTr
+        ? '📱 Firebase Push: Telefon henüz kayıtlı değil (Telefonda Tailscale açıkken uygulamayı 1 kez açın)'
+        : '📱 Firebase Push: No phone registered yet (open app once on phone while connected)';
+      if (testBtn) testBtn.hidden = true;
+    }
+  } catch {
+    bar.hidden = true;
+  }
+}
+
+document.getElementById('al-test-push-btn')?.addEventListener('click', async () => {
+  const isTr = getLang() === 'tr';
+  try {
+    const r = await fetch('/api/push/test', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(
+        isTr ? '📱 Test Bildirimi Gönderildi' : '📱 Test Push Sent',
+        isTr ? 'Telefonunuzun bildirim çubuğunu kontrol edin.' : 'Check your phone notification shade.'
+      );
+    } else {
+      showToast(
+        isTr ? 'Push Gönderilemedi' : 'Push Failed',
+        d.reason || d.errors?.[0] || 'Unknown error'
+      );
+    }
+  } catch (err) {
+    showToast('Push Error', String(err?.message || err));
+  }
+});
 
 function renderAlertsList() {
   alertsListEl.innerHTML = '';
@@ -4295,15 +4404,55 @@ async function boot() {
   initCapacitorNativePush();
 }
 
+let pushInitStarted = false;
+
+async function postPushTokenToServer(token, silent = false) {
+  if (!token) return;
+  try {
+    localStorage.setItem('velox_fcm_token_v1', token);
+  } catch {}
+  try {
+    const res = await fetch('/api/push/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token,
+        platform: 'android',
+        name: 'Velox Android',
+      }),
+    });
+    if (res.ok && !silent) {
+      const isTr = getLang() === 'tr';
+      showToast(
+        isTr ? '🔔 Mobil Push Bağlandı' : '🔔 Mobile Push Connected',
+        isTr
+          ? 'Artık uygulama ve Tailscale kapalıyken bile alarmlar telefonunuza bildirim olarak gelir.'
+          : 'Price alerts will now arrive on your phone even when the app is closed.'
+      );
+      refreshMobilePushStatusBar();
+    }
+  } catch {
+    // ignore
+  }
+}
+
 async function initCapacitorNativePush() {
+  if (pushInitStarted) return;
   const cap = window.Capacitor;
   if (!cap) return;
+  pushInitStarted = true;
   try {
     const SB = cap.Plugins?.StatusBar;
     if (SB) {
       SB.setOverlaysWebView?.({ overlay: false }).catch?.(() => {});
       SB.setBackgroundColor?.({ color: '#0a0f1d' }).catch?.(() => {});
     }
+  } catch {}
+
+  // Immediately re-register any cached FCM token with Oracle on boot
+  try {
+    const cached = localStorage.getItem('velox_fcm_token_v1');
+    if (cached) postPushTokenToServer(cached, true);
   } catch {}
 
   const Push = cap.Plugins?.PushNotifications;
@@ -4323,18 +4472,17 @@ async function initCapacitorNativePush() {
     }
     if (perm.receive !== 'granted') return;
 
-    await Push.removeAllListeners?.();
+    // Attach listeners FIRST (do NOT call removeAllListeners right before addListener to avoid native IPC race!)
+    let handledRegistration = false;
     await Push.addListener('registration', (tokenObj) => {
       if (!tokenObj?.value) return;
-      fetch('/api/push/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: tokenObj.value,
-          platform: 'android',
-          name: 'Velox Android',
-        }),
-      }).catch(() => {});
+      const firstTime = !handledRegistration && localStorage.getItem('velox_fcm_token_v1') !== tokenObj.value;
+      handledRegistration = true;
+      postPushTokenToServer(tokenObj.value, !firstTime);
+    });
+
+    await Push.addListener('registrationError', (err) => {
+      console.warn('[Velox Push] Registration error:', err);
     });
 
     await Push.addListener('pushNotificationReceived', (notif) => {
@@ -4354,6 +4502,8 @@ async function initCapacitorNativePush() {
       }
     });
 
+    // Small yield so native Capacitor bridge finishes attaching listeners before Firebase returns cached token
+    await new Promise((r) => setTimeout(r, 150));
     await Push.register();
   } catch (err) {
     console.warn('[Velox Push] Init skipped:', err);

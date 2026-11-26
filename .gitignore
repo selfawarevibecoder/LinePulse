@@ -10,6 +10,11 @@ desktop/seed-archive-full/
 desktop/seed-personal/
 desktop/app-bundle/
 mobile-android/
+mobile/node_modules/
+mobile/android/
+mobile/ios/
+mobile/www/
+!mobile/www/standalone-public.js
 oracle-deploy/
 
 # Build outputs & packaged binaries

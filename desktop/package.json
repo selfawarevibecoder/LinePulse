@@ -1,7 +1,7 @@
 {
   "name": "linepulse-desktop",
   "productName": "Velox Charts",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Velox Charts — Multi-Screen Live Trading Charts & FXReplay Backtest",
   "type": "module",
   "main": "main.js",

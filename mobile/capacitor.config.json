@@ -1,0 +1,19 @@
+{
+  "appId": "com.veloxcharts.mobile.public",
+  "appName": "Velox Charts",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "StatusBar": {
+      "overlaysWebView": false,
+      "style": "DARK",
+      "backgroundColor": "#0a0f1d"
+    }
+  }
+}

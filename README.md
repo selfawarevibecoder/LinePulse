@@ -1,103 +1,84 @@
-# LinePulse
+# Velox Charts (`v1.4.1`)
 
-[🇹🇷 Türkçe Açıklama](#-türkçe-açıklama) · [🇬🇧 English Documentation](#-english-documentation)
+[🇹🇷 Türkçe Açıklama](#-türkçe-açıklama) · [🇬🇧 English Documentation](#-english-documentation) · [📘 Görsel Kurulum Rehberi (PDF)](docs/Velox_Charts_Kurulum_Rehberi.pdf) · [☁️ 7/24 Bulut Senkronizasyon & Push Rehberi](docs/CLOUD_SYNC_AND_PUSH_GUIDE.md)
 
 ---
 
 ## 🇹🇷 Türkçe Açıklama
 
-**LinePulse**, TradingView tarzı çoklu ekran canlı grafik ve FXReplay tarzı internetsiz/internetli backtest (Bar Replay) platformudur. Backend tamamen saf Node.js ile yazılmıştır (**sıfır harici npm paketi**).
+**Velox Charts**, TradingView tarzı çoklu ekran canlı grafik ve FXReplay tarzı Backtest (Bar Replay) platformudur. Backend tamamen saf Node.js ile yazılmıştır (**sıfır harici npm paketi**).
 
 ### Öne Çıkan Özellikler
-- **Sınırsız Çoklu Monitör Desteği (9, 12, 16+ Monitör):** Tek tıkla `+ New Screen` ile istediğin kadar senkronize ekran penceresi aç, her ekrana ayrı 1/2/3/4/6'lı grafik ızgarası koy. Çizimler, alarmlar ve izleme listeleri tüm ekranlar arasında anlık senkronize olur.
-- **Profesyonel Çizim & Alarm Araçları:** Trend çizgisi, ışın (Ray), paralel kanal, opaklık ve kenarlık ayarlı kutu (Box), Fibonacci, tek/çift ok, ZigZag, metin, Long/Short Risk:Ödül kutuları ve grafik üstünde sürüklenebilir fiyat alarmları.
-- **FXReplay Tarzı Bar Replay & Backtest:** Sıfır gelecek sızıntılı (zero look-ahead) mum oynatma, çoklu parite senkron replay, Prop Firm kural setleri (FTMO, The5ers + kendi özel kuralların), spread/komisyon simülasyonu, işlem günlüğü, equity eğrisi, **isimle kaydetme (`💾 Save As`)** ve **tek dosya paylaşım/içe aktarma (`📤 Share File` / `📥 Import`)**.
-- **Hibrit `1h + 1m` Offline Arşiv Motoru:** `2010–2019 (1h)` ile `2020–günümüz (1m)` verilerini kesintisiz birleştirir (`1h/4h/12h/1D/1W` açtığında 2010'a kadar gider); TradingView yaz/kış saati (DST) uyumlu seans kapanışlarını kullanır (CME `18:00 NY`, Forex `17:00 NY`, Kripto `00:00 UTC`).
-- **Tek Tıkla Güncelleme & `.ZIP` Data Pack:**
-  - `🔄 Update`: Sadece son indirmeden bugüne eksik yeni barları çeker.
-  - `⏪ -6M`: Tek tuşla 6 ay daha eski `1m` verisi çeker.
-  - `📦 Import .ZIP Pack`: Paylaşılan `LinePulse-Full-Data-Pack.zip` dosyasını hiç açmadan tek tıkla seçip tüm pariteleri içeri aktarır!
+- **Sınırsız Çoklu Monitör Desteği:** Tek tıkla `+ New Screen` ile istediğin kadar senkronize pencere aç; her pencerede 1/2/3/4/6'lı grafik düzeni kur.
+- **Zengin Piyasa Kapsamı:**
+  - **OANDA (Ücretsiz Practice API ile):** Forex, Altın (`XAU/USD`), Gümüş (`XAG/USD`), Sentetik DXY, `NAS100`, `SPX500`, Petrol — 0 sn gerçek zamanlı akış.
+  - **CME Vadeli İşlemler (API Anahtarsız):** `NQ1!`, `ES1!`, `GC1!`, `CL1!`, `6E1!`, `SI1!` — gerçek borsa fiyatları (~1–2 dk gecikmeli ücretsiz akış).
+  - **Borsa İstanbul (`BIST`) & Spot TRY (API Anahtarsız):** `BIST 100`, `BIST 30`, `XBANK`, `THYAO`, `ASELS`, `GARAN` + 20+ BIST hissesi (ve herhangi bir `<KOD>.IS` hissesi), ayrıca gerçek zamanlı çok yıllık `USD/TRY`, `EUR/TRY`, `GBP/TRY`.
+  - **Kripto (API Anahtarsız):** Binance, Coinbase, Bybit, Kraken 7/24 gerçek zamanlı WebSocket.
+- **Ekonomik Takvim & Piyasa Tatilleri:** ABD/AB makro haberleri, grafik üstü haber ikonları, açılır/kapanır geçmiş haberler ve otomatik hesaplanan ABD/Avrupa/İngiltere piyasa tatilleri (Thanksgiving, Noel, Erken Kapanışlar vb.).
+- **Profesyonel Çizim & Fiyat Alarmları:** Trend çizgisi, ışın, paralel kanal, kutu, Fibonacci, ok, ZigZag, serbest çizim, Long/Short Risk:Ödül aracı ve grafikte sürüklenebilir fiyat alarmları.
+- **FXReplay Tarzı Bar Replay & Backtest:** Sıfır gelecek sızıntılı mum oynatma, çoklu parite senkron replay, Prop Firm kuralları (FTMO, The5ers + özel kurallar), işlem günlüğü, equity eğrisi, sıfır-RAM ikili (`.bin`) hızlı replay motoru ve tek dosya paylaşım (`📤 Export File`).
+- **Masaüstü + Web + Mobil (Android & iOS):** macOS (`.dmg`), Windows (`.zip`), Web (`node server/index.js`) ve Capacitor tabanlı bağımsız mobil uygulama (`mobile/`).
 
-### Güvenlik ve Virüssüzlük Garantisi
+### Güvenlik ve Virüssüzlük Garantisi (Açık Kaynak Denetimi)
 Bu repo **%100 okunabilir, açık kaynak** koddan oluşur:
-- Backend (`server/`) **hiçbir harici kütüphane kullanmaz**, sadece Node.js'in kendi yerleşik modüllerini kullanır.
+- Backend (`server/`) **hiçbir harici npm kütüphanesi kullanmaz**, sadece Node.js yerleşik modüllerini kullanır.
 - **Sıfır telemetri, sıfır takip, sıfır gizli dosya, sıfır gömülü API anahtarı veya kişisel veri.**
-- Sadece kendi bilgisayarında (`127.0.0.1` localhost) çalışır.
+- Varsayılan olarak yalnızca kendi bilgisayarınızda (`127.0.0.1` localhost) çalışır.
 
 #### Kendi Yapay Zekana Denetlet & Kur (Tek Mesajla)
-Programı kurmadan önce kodun temiz olduğundan emin olmak için bu mesajı **ChatGPT, Gemini, Claude, Cursor veya Antigravity** asistanına yapıştırabilirsin:
+Kurmadan önce kodda virüs, veri sızıntısı veya arka kapı olup olmadığını denetlemek için şu mesajı **ChatGPT, Gemini, Claude, Cursor veya Antigravity** asistanına yapıştırabilirsin:
 
-> *"Bu GitHub reposunu incele (`https://github.com/selfawarevibecoder/LinePulse`): içinde zararlı kod, virüs, arka kapı veya veri sızdıran bir şey var mı kontrol et. Temizse bilgisayarıma indirip lokalde çalıştırmam (veya istersem kendi macOS `.dmg` / Windows `.exe` kurulum paketimi kendim derlemem) için adım adım yardım et."*
+> *"Bu GitHub reposunu incele (`https://github.com/selfawarevibecoder/LinePulse`): içinde zararlı kod, virüs, arka kapı veya veri sızdıran bir şey var mı kontrol et. Temizse bilgisayarıma indirip lokalde çalıştırmam (veya kendi macOS `.dmg` / Windows `.zip` / Android `.apk` paketimi derlemem) için adım adım yardım et."*
 
-### Hızlı Başlangıç (Kurulumsuz — İşletim Sistemi Uyarısı Olmadan)
-Bilgisayarda **Node.js 20+** kurulu olması yeterlidir (`npm install` bile gerekmez!):
-
+### Hızlı Başlangıç (Kurulumsuz — Node.js 20+)
 ```bash
 git clone https://github.com/selfawarevibecoder/LinePulse.git
 cd LinePulse
 node server/index.js
 ```
+Ardından tarayıcıda **`http://localhost:3456`** adresini açın.
 
-Ardından tarayıcıda **`http://localhost:3456`** adresini aç.
+- **Detaylı Adım Adım Görsel Kurulum (OANDA API alma dahil):** [docs/Velox_Charts_Kurulum_Rehberi.pdf](docs/Velox_Charts_Kurulum_Rehberi.pdf)
+- **İsteğe Bağlı 7/24 Bulut Senkronizasyonu & Kilit Ekranı Push Kurulumu:** [docs/CLOUD_SYNC_AND_PUSH_GUIDE.md](docs/CLOUD_SYNC_AND_PUSH_GUIDE.md)
 
-### Veri Kaynakları (API'siz & API'li Kullanım)
-- **Hiç API Anahtarı Olmadan Çalışanlar:**
-  - **Binance / Bybit / Coinbase Kripto** canlı & geçmiş grafikler
-  - **Ekonomik Takvim (News)** haber akışı
-  - **Offline Data Pack (`.zip`)** ile internetsiz ve anahtarsız sınırsız backtest (CME, OANDA, Binance)
-- **Kendi Ücretsiz / İsteğe Bağlı API Anahtarlarınla Açılanlar (Settings ⚙):**
-  - **OANDA Practice API (Ücretsiz):** FX, Altın, Gümüş, Sentetik DXY, Endeksler ve Petrol canlı akış + geçmiş backtest (anahtarın sadece kendi bilgisayarında `.env` dosyasında kalır).
-  - **Databento (İsteğe bağlı):** Resmi CME Vadeli İşlemler (`GLBX.MDP3`) geçmiş arşivi.
-  - **IBKR Client Portal (İsteğe bağlı):** Kendi Interactive Brokers hesabın üzerinden canlı CME verisi.
+### Kaynaktan Kendin Derle (Masaüstü & Mobil)
+```bash
+# Masaüstü (macOS / Windows)
+cd desktop
+npm install
+npm run build:mac:public   # macOS .dmg
+npm run build:win:zip      # Windows portable .zip
 
-### `.ZIP` Offline Data Pack Nasıl İçe Aktarılır?
-Sana `LinePulse-1.3.0-Full-Data-Pack.zip` dosyası paylaşıldıysa:
-1. **En Kolay Yol (Tek Tık — Zip'i Açmana Bile Gerek Yok!):**
-   - LinePulse'ı aç → **Backtest / Replay** → **`📦 Data`** → **`📦 Import .ZIP Pack / Files`** → doğrudan `.zip` dosyasını seç. Tüm pariteler otomatik olarak açılıp arşive eklenir!
-2. **Alternatif (Klasöre Kopyalama):**
-   - Zip'i açıp içindeki `.json.gz` dosyalarını `archive` klasörüne bırak ve LinePulse'ı yeniden başlat (otomatik açar):
-     - Lokal Web: `LinePulse/data/archive/`
-     - macOS Uygulama: `~/Library/Application Support/LinePulse/linepulse-data/archive/`
-     - Windows Uygulama: `%APPDATA%\LinePulse\linepulse-data\archive\`
+# Bağımsız Mobil Uygulama (Android APK — Java 21 + Android SDK)
+cd ../mobile
+bash build-public-apk.sh
+
+# iPhone / iOS (macOS + Xcode gerekir)
+cd mobile
+npm install && npm install @capacitor/ios
+npx cap add ios && npx cap sync ios && npx cap open ios
+```
 
 ---
 
 ## 🇬🇧 English Documentation
 
-**LinePulse** is a multi-screen TradingView-style live charting & FXReplay-style offline/online backtesting platform built with pure Node.js (**zero external backend npm dependencies**), HTML5/Canvas, and Lightweight Charts.
+**Velox Charts (`v1.4.1`)** is an open-source, multi-screen TradingView-style live charting and FXReplay-style Bar Replay / Backtesting platform built with pure Node.js (**zero external backend npm dependencies**), HTML5 Canvas, and Lightweight Charts.
 
-### Features
-- **Unlimited Multi-Monitor Support (9, 12, 16+ Monitors):** Open as many synchronized monitor windows as needed (`+ New Screen`) with independent grid layouts, shared drawings, alerts, and watchlists.
-- **FXReplay-Style Bar Replay & Backtesting:** Zero look-ahead candle replay, multi-pair synced replay, Prop Firm rule presets (FTMO, The5ers + custom rules), spread/commission simulation, trade journal, equity curve, named `💾 Save As`, and single-file `📤 Share File` / `📥 Import` for mentor/student review.
-- **Hybrid `1h + 1m` Offline Archive & 1-Click `.ZIP` Data Pack Import:** Seamlessly stitches `1h` history (2010–2019) with `1m` data (2020–present) using TradingView DST-aligned session boundaries (CME `18:00 NY`, Forex `17:00 NY`, Crypto `00:00 UTC`). Import an entire `.zip` Data Pack in one click via `📦 Data → 📦 Import .ZIP Pack / Files`.
-- **Smart Incremental Sync:** Click `🔄 Update` to pull only missing new bars, or `⏪ -6M` to pull 6 months of older `1m` history without re-downloading existing dates.
+### Key Features
+- **Unlimited Multi-Monitor Support:** Spawn synchronized monitor windows (`+ New Screen`) with independent grid layouts, shared drawings, watchlists, and alerts.
+- **Multi-Asset Feeds:** Free live Crypto (Binance, Coinbase, Bybit, Kraken), CME Futures (`NQ1!`, `ES1!`, `GC1!`, `CL1!`, `6E1!`), US Stocks & Borsa Istanbul (`BIST 100`, `BIST 30`, `XBANK`, Turkish equities), real-time FX Spot TRY pairs (`USD/TRY`, `EUR/TRY`, `GBP/TRY`), and optional zero-latency OANDA Practice/Live FX & Metals via your own free API key.
+- **Economic Calendar & Market Holidays:** Macro releases with Actual/Forecast/Previous, collapsible past events, and automatic US/EU/UK Market Holidays & Early Close alerts.
+- **FXReplay-Style Bar Replay:** Zero look-ahead replay, multi-pair sync, Prop Firm rules (FTMO, The5ers, custom), trade journal, equity curve, and zero-RAM binary `.bin` replay indexing.
+- **Desktop, Web & Standalone Mobile (Android & iOS):** Run locally via `node server/index.js`, build desktop installers in `desktop/`, or build standalone mobile apps in `mobile/`. Optional self-hosted 24/7 Cloud Sync & Push setup is documented in [docs/CLOUD_SYNC_AND_PUSH_GUIDE.md](docs/CLOUD_SYNC_AND_PUSH_GUIDE.md).
 
-### Security & Zero-Malware Verification
-- **100% readable open-source code** with **zero external backend npm dependencies**.
-- **Zero telemetry, zero hidden binaries, zero pre-bundled API keys or local user data.**
-- Runs strictly on `127.0.0.1` (localhost).
-
-#### Audit & Install With Your Own AI Assistant
-> *"Inspect this GitHub repository (`https://github.com/selfawarevibecoder/LinePulse`) and check whether it contains any malicious code, backdoors, or data exfiltration. If it is clean, help me clone and run it locally (or build my own macOS `.dmg` / Windows `.exe` installer from source)."*
-
-### Quick Start (No Installer Needed — Zero OS Warnings)
-Requires **Node.js 20+**:
-
+### Security & Quick Start
+- **100% readable open-source code**, zero external backend dependencies, zero telemetry, zero bundled keys.
+- Requires **Node.js 20+**:
 ```bash
 git clone https://github.com/selfawarevibecoder/LinePulse.git
 cd LinePulse
 node server/index.js
 ```
-
 Open **`http://localhost:3456`** in your browser.
-
-### Optional: Build Desktop App From Source (macOS / Windows / Linux)
-
-```bash
-cd desktop
-npm install
-npm run build:mac:public   # macOS .dmg
-npm run build:win:zip      # Windows portable .zip
-```
-
-*(Note: Unsigned desktop builds may show macOS Gatekeeper or Windows SmartScreen notices because they are not signed with paid Apple/Microsoft certificates. Running directly via `node server/index.js` or building from source avoids all OS warnings.)*

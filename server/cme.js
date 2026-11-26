@@ -51,95 +51,180 @@ const TWELVEDATA_TF_MAP = {
 
 const historyCache = new Map();
 
-// Yahoo Finance deep-history mapping (multi-month 5m/15m, 2y 1h/4h, 10y+ 1D/1W) for TRY FX Spot & Borsa İstanbul (BIST)
-const YAHOO_FX_MAP = {
-  'TRY=': 'TRY=X',
-  'EURTRY=': 'EURTRY=X',
-  'GBPTRY=': 'GBPTRY=X',
+// TradingView public WebSocket deep-history mapping (500-1500 bars on EVERY TF: 1m/5m/15m/1h/4h/1D/1W!)
+// Works cleanly from cloud VMs (Oracle) & desktops with zero API key and zero 429 blocks!
+const TV_FX_MAP = {
+  'TRY=': 'FX_IDC:USDTRY',
+  'EURTRY=': 'FX_IDC:EURTRY',
+  'GBPTRY=': 'FX_IDC:GBPTRY',
 };
 
-function resolveYahooSymbol(resolved) {
+function resolveTvSymbol(resolved) {
   const up = String(resolved || '').trim().toUpperCase();
-  if (YAHOO_FX_MAP[up]) return YAHOO_FX_MAP[up];
-  if (up.endsWith('.IS') || up.endsWith('=X')) return up;
+  if (TV_FX_MAP[up]) return TV_FX_MAP[up];
+  if (up.startsWith('BIST:')) return up;
+  if (up.endsWith('.IS')) return `BIST:${up.slice(0, -3)}`;
   return null;
 }
 
-function pickYahooSpec(parsed) {
-  if (parsed.unit === 'M') return { interval: '1mo', range: 'max', needsResample: parsed.count > 1 };
-  if (parsed.unit === 'w') return { interval: '1wk', range: '10y', needsResample: parsed.count > 1 };
-  if (parsed.unit === 'd') return { interval: '1d', range: '5y', needsResample: parsed.count > 1 };
-  if (parsed.seconds >= 3600) return { interval: '1h', range: '2y', needsResample: parsed.seconds > 3600 };
-  if (parsed.seconds >= 900) return { interval: '15m', range: '60d', needsResample: parsed.seconds > 900 };
-  if (parsed.seconds >= 300) return { interval: '5m', range: '60d', needsResample: parsed.seconds > 300 };
-  return { interval: '1m', range: '7d', needsResample: parsed.seconds > 60 };
+function toTvResolution(parsed) {
+  if (parsed.unit === 'M') return '1M';
+  if (parsed.unit === 'w') return '1W';
+  if (parsed.unit === 'd') return '1D';
+  const mins = Math.max(1, Math.round(parsed.seconds / 60));
+  if ([1, 3, 5, 15, 30, 45, 60, 120, 180, 240, 720].includes(mins)) return String(mins);
+  if (mins > 240) return '240';
+  if (mins > 60) return '60';
+  if (mins > 15) return '15';
+  if (mins > 5) return '5';
+  return '1';
 }
 
-async function fetchYahooBars(yahooSymbol, parsed) {
-  const spec = pickYahooSpec(parsed);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=${spec.interval}&range=${spec.range}&includePrePost=false`;
-  const res = await fetch(url, {
-    headers: BROWSER_HEADERS,
-    signal: AbortSignal.timeout(10000),
+function fetchTradingViewBars(tvSymbol, parsed, barCount = 1200) {
+  const tvRes = toTvResolution(parsed);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cs = `cs_vlx_${Math.random().toString(36).slice(2, 10)}`;
+    const frame = (m, p) => {
+      const s = JSON.stringify({ m, p });
+      return `~m~${s.length}~m~${s}`;
+    };
+    let ws;
+    try {
+      ws = new WebSocket('wss://data.tradingview.com/socket.io/websocket', {
+        headers: {
+          Origin: 'https://www.tradingview.com',
+          'User-Agent': BROWSER_HEADERS['User-Agent'],
+        },
+      });
+    } catch (err) {
+      reject(err);
+      return;
+    }
+
+    const done = (err, val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {
+        // ignore
+      }
+      if (err) reject(err);
+      else resolve(val);
+    };
+
+    const timer = setTimeout(() => done(new Error(`TV timeout for ${tvSymbol}`)), 9000);
+    let symMeta = {};
+
+    ws.onopen = () => {
+      try {
+        ws.send(frame('set_auth_token', ['unauthorized_user_token']));
+        ws.send(frame('chart_create_session', [cs, '']));
+        ws.send(
+          frame('resolve_symbol', [
+            cs,
+            'sds_sym_1',
+            `=${JSON.stringify({ symbol: tvSymbol, adjustment: 'splits' })}`,
+          ])
+        );
+        ws.send(frame('create_series', [cs, 'sds_1', 's1', 'sds_sym_1', tvRes, barCount, '']));
+      } catch (err) {
+        done(err);
+      }
+    };
+
+    ws.onerror = () => done(new Error(`TV socket error for ${tvSymbol}`));
+
+    ws.onmessage = (ev) => {
+      const raw = String(ev.data || '');
+      const parts = raw.split(/~m~\d+~m~/).filter(Boolean);
+      for (const part of parts) {
+        if (part.startsWith('~h~')) {
+          try {
+            ws.send(`~m~${part.length}~m~${part}`);
+          } catch {}
+          continue;
+        }
+        if (!part.startsWith('{')) continue;
+        let obj;
+        try {
+          obj = JSON.parse(part);
+        } catch {
+          continue;
+        }
+        if (obj.m === 'symbol_resolved' && obj.p?.[2]) {
+          symMeta = obj.p[2];
+        } else if (obj.m === 'symbol_error') {
+          done(new Error(`Sembol bulunamadı: ${tvSymbol}`));
+          return;
+        } else if (obj.m === 'timescale_update' && obj.p?.[1]?.sds_1?.s?.length) {
+          const rows = obj.p[1].sds_1.s;
+          const bars = [];
+          let prevT = -1;
+          for (let i = 0; i < rows.length; i += 1) {
+            const v = rows[i]?.v;
+            if (!Array.isArray(v) || v.length < 5) continue;
+            const t = Math.floor(Number(v[0]));
+            const o = Number(v[1]);
+            const h = Number(v[2]);
+            const l = Number(v[3]);
+            const c = Number(v[4]);
+            if (!Number.isFinite(t) || !Number.isFinite(c) || c <= 0 || t <= prevT) continue;
+            prevT = t;
+            const open = Number.isFinite(o) && o > 0 ? o : c;
+            bars.push({
+              time: t,
+              open,
+              high: Number.isFinite(h) && h > 0 ? Math.max(h, open, c) : Math.max(open, c),
+              low: Number.isFinite(l) && l > 0 ? Math.min(l, open, c) : Math.min(open, c),
+              close: c,
+            });
+          }
+          const needResample = parsed.seconds > 60 && String(Math.round(parsed.seconds / 60)) !== tvRes && !['1D', '1W', '1M'].includes(tvRes);
+          const finalBars = needResample ? resampleOhlc(bars, parsed) : bars;
+          done(null, { bars: finalBars, meta: symMeta });
+          return;
+        }
+      }
+    };
   });
-  if (!res.ok) throw new Error(`Yahoo chart HTTP ${res.status}`);
-  const json = await res.json();
-  const result = json?.chart?.result?.[0];
-  if (!result || !Array.isArray(result.timestamp)) {
-    throw new Error(`${yahooSymbol} için grafik verisi bulunamadı`);
-  }
-  const ts = result.timestamp;
-  const q = result.indicators?.quote?.[0] || {};
-  const opens = q.open || [];
-  const highs = q.high || [];
-  const lows = q.low || [];
-  const closes = q.close || [];
-
-  const bars = [];
-  let prevT = -1;
-  const maxAllowedTs = Math.floor(Date.now() / 1000) + 120;
-  for (let i = 0; i < ts.length; i += 1) {
-    const t = Number(ts[i]);
-    const c = Number(closes[i]);
-    if (!Number.isFinite(t) || !Number.isFinite(c) || c <= 0) continue;
-    if (t <= prevT || t > maxAllowedTs) continue;
-    prevT = t;
-    const o = Number(opens[i]);
-    const h = Number(highs[i]);
-    const l = Number(lows[i]);
-    const open = Number.isFinite(o) && o > 0 ? o : c;
-    const high = Number.isFinite(h) && h > 0 ? Math.max(h, open, c) : Math.max(open, c);
-    const low = Number.isFinite(l) && l > 0 ? Math.min(l, open, c) : Math.min(open, c);
-    bars.push({ time: t, open, high, low, close: c });
-  }
-  const finalBars = spec.needsResample ? resampleOhlc(bars, parsed) : bars;
-  return { bars: finalBars, meta: result.meta || {} };
 }
 
-async function fetchYahooLiveQuote(yahooSymbol) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1m&range=1d`;
-  const res = await fetch(url, {
-    headers: BROWSER_HEADERS,
+async function fetchBistScannerQuotes(bistRawSymbols) {
+  if (!bistRawSymbols.length) return new Map();
+  const tickers = bistRawSymbols.map((s) => resolveTvSymbol(s)).filter(Boolean);
+  if (!tickers.length) return new Map();
+  const res = await fetch('https://scanner.tradingview.com/turkey/scan', {
+    method: 'POST',
+    headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      symbols: { tickers },
+      columns: ['name', 'close', 'open', 'high', 'low', 'change', 'change_abs', 'description'],
+    }),
     signal: AbortSignal.timeout(8000),
   });
-  if (!res.ok) return null;
+  if (!res.ok) return new Map();
   const json = await res.json();
-  const meta = json?.chart?.result?.[0]?.meta;
-  if (!meta || !Number.isFinite(Number(meta.regularMarketPrice))) return null;
-  const price = Number(meta.regularMarketPrice);
-  const time = Number(meta.regularMarketTime) || Math.floor(Date.now() / 1000);
-  const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose);
+  const out = new Map();
   const nowSec = Math.floor(Date.now() / 1000);
-  const diffMin = Math.max(0, Math.round((nowSec - time) / 60));
-  const feedMode = diffMin > 45 ? 'closed' : diffMin <= 2 ? 'live' : 'delayed';
-  return {
-    price,
-    time,
-    prevClose: Number.isFinite(prevClose) ? prevClose : null,
-    feedMode,
-    delayMinutes: feedMode === 'delayed' ? Math.min(diffMin, 20) : feedMode === 'live' ? 0 : null,
-    shortName: meta.shortName || meta.longName || yahooSymbol,
-  };
+  for (const row of json?.data || []) {
+    const ticker = row?.s;
+    const d = row?.d;
+    if (!ticker || !Array.isArray(d)) continue;
+    const close = Number(d[1]);
+    const changeAbs = Number(d[6]);
+    if (!Number.isFinite(close) || close <= 0) continue;
+    const prevClose = Number.isFinite(changeAbs) ? close - changeAbs : Number(d[2]);
+    out.set(ticker, {
+      price: close,
+      prevClose: Number.isFinite(prevClose) ? prevClose : null,
+      time: nowSec,
+      name: d[7] || d[0] || ticker,
+    });
+  }
+  return out;
 }
 
 function parseNum(raw) {
@@ -277,48 +362,48 @@ export async function fetchCmeHistory(rawSymbol, tf = '1m', sourceOverride = 'cm
 
   const curated = findCuratedSymbol(sourceOverride, resolved) || findCuratedSymbol('cme', resolved);
 
-  // Yahoo Finance deep multi-year history path for FX Spot TRY pairs & Borsa İstanbul (BIST *.IS)
-  const yahooSym = resolveYahooSymbol(resolved);
-  if (yahooSym) {
-    const isCnbcFx = Boolean(YAHOO_FX_MAP[resolved]);
-    const [yh, cnbcQuotes] = await Promise.all([
-      fetchYahooBars(yahooSym, parsed),
-      isCnbcFx ? fetchCnbcQuotes([resolved]).catch(() => []) : Promise.resolve([]),
-    ]);
-    const bars = yh.bars || [];
-    const meta = yh.meta || {};
-    const cnbcQ = cnbcQuotes[0] || null;
-    const livePx = cnbcQ ? parseNum(cnbcQ.last) : Number(meta.regularMarketPrice);
-    const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose ?? (cnbcQ ? parseNum(cnbcQ.previous_day_closing) : NaN));
-    const lastBar = bars[bars.length - 1] || null;
-    const lastPrice = Number.isFinite(livePx) ? livePx : lastBar?.close ?? null;
-    const nowSec = Math.floor(Date.now() / 1000);
-    const mktTime = Number(meta.regularMarketTime) || lastBar?.time || nowSec;
-    const diffMin = Math.max(0, Math.round((nowSec - mktTime) / 60));
-    const feedMode = isCnbcFx
-      ? 'live'
-      : diffMin > 45
-        ? 'closed'
-        : diffMin <= 2
-          ? 'live'
-          : 'delayed';
-    const delayMinutes = feedMode === 'delayed' ? Math.min(diffMin, 20) : feedMode === 'live' ? 0 : null;
-    const payload = {
-      source: sourceOverride,
-      symbol: rawSymbol,
-      display: curated?.display || meta.shortName || rawSymbol,
-      exchange: curated?.exchange || (yahooSym.endsWith('.IS') ? 'BIST' : 'FX SPOT'),
-      tf: parsed.label,
-      bucketSec: parsed.seconds,
-      precision: curated?.precision ?? (yahooSym.endsWith('=X') ? 4 : inferPrecision(lastPrice)),
-      feedMode,
-      delayMinutes,
-      bars,
-      lastPrice,
-      referencePrice: Number.isFinite(prevClose) ? prevClose : bars[0]?.open ?? lastPrice,
-    };
-    historyCache.set(cacheKey, { at: Date.now(), data: payload });
-    return payload;
+  // Deep multi-year history via TradingView Data WS for FX Spot TRY pairs & Borsa İstanbul (BIST *.IS)
+  const tvSym = resolveTvSymbol(resolved);
+  if (tvSym) {
+    const isBist = tvSym.startsWith('BIST:');
+    const isCnbcFx = Boolean(TV_FX_MAP[resolved]);
+    try {
+      const [tv, bistMap, cnbcQuotes] = await Promise.all([
+        fetchTradingViewBars(tvSym, parsed, 1200),
+        isBist ? fetchBistScannerQuotes([resolved]).catch(() => new Map()) : Promise.resolve(new Map()),
+        isCnbcFx ? fetchCnbcQuotes([resolved]).catch(() => []) : Promise.resolve([]),
+      ]);
+      const bars = tv.bars || [];
+      const bistQ = isBist ? bistMap.get(tvSym) : null;
+      const cnbcQ = cnbcQuotes[0] || null;
+      const livePx = bistQ ? bistQ.price : cnbcQ ? parseNum(cnbcQ.last) : null;
+      const prevClose = bistQ?.prevClose ?? (cnbcQ ? parseNum(cnbcQ.previous_day_closing) : NaN);
+      const lastBar = bars[bars.length - 1] || null;
+      const lastPrice = Number.isFinite(livePx) ? livePx : lastBar?.close ?? null;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const diffMin = lastBar ? Math.max(0, Math.round((nowSec - lastBar.time) / 60)) : 0;
+      const feedMode = isCnbcFx ? 'live' : diffMin > 90 && parsed.seconds < 86400 ? 'closed' : isBist ? 'delayed' : 'live';
+      const delayMinutes = isCnbcFx ? 0 : feedMode === 'delayed' ? 15 : null;
+      const payload = {
+        source: sourceOverride,
+        symbol: rawSymbol,
+        display: curated?.display || tv.meta?.description || rawSymbol,
+        exchange: curated?.exchange || (isBist ? 'BIST' : 'FX SPOT'),
+        tf: parsed.label,
+        bucketSec: parsed.seconds,
+        precision: curated?.precision ?? (isCnbcFx ? 4 : inferPrecision(lastPrice)),
+        feedMode,
+        delayMinutes,
+        bars,
+        lastPrice,
+        referencePrice: Number.isFinite(prevClose) ? prevClose : bars[0]?.open ?? lastPrice,
+      };
+      historyCache.set(cacheKey, { at: Date.now(), data: payload });
+      return payload;
+    } catch (err) {
+      if (isBist) throw err;
+      // For FX Spot TRY pairs, fall through gracefully to CNBC below!
+    }
   }
 
   const cfg = getConfig();
@@ -557,43 +642,42 @@ export class CmePollerManager extends EventEmitter {
       }
 
       const uniqueResolved = Array.from(resolvedToRaws.keys());
-      const yahooOnly = uniqueResolved.filter((s) => s.toUpperCase().endsWith('.IS') || s.toUpperCase().endsWith('=X'));
-      const cnbcOnly = uniqueResolved.filter((s) => !yahooOnly.includes(s));
+      const bistOnly = uniqueResolved.filter((s) => {
+        const up = s.toUpperCase();
+        return up.endsWith('.IS') || up.startsWith('BIST:');
+      });
+      const cnbcOnly = uniqueResolved.filter((s) => !bistOnly.includes(s));
 
-      const quotes = cnbcOnly.length ? await fetchCnbcQuotes(cnbcOnly) : [];
+      const [quotes, bistMap] = await Promise.all([
+        cnbcOnly.length ? fetchCnbcQuotes(cnbcOnly) : Promise.resolve([]),
+        bistOnly.length ? fetchBistScannerQuotes(bistOnly).catch(() => new Map()) : Promise.resolve(new Map()),
+      ]);
       let anyOk = false;
 
-      // Poll Borsa İstanbul (BIST *.IS) & Yahoo-only tickers cleanly in parallel
-      if (yahooOnly.length) {
-        await Promise.all(
-          yahooOnly.map(async (ySym) => {
-            try {
-              const yq = await fetchYahooLiveQuote(ySym);
-              if (!yq) return;
-              anyOk = true;
-              const raws = resolvedToRaws.get(ySym) || [ySym];
-              for (const rawSym of raws) {
-                const prev = this.latestTicks.get(rawSym);
-                const tick = {
-                  source: 'cme',
-                  symbol: rawSym,
-                  price: yq.price,
-                  time: yq.time,
-                  prevClose: yq.prevClose,
-                  feedMode: yq.feedMode,
-                  delayMinutes: yq.delayMinutes,
-                  quoteOnly: false,
-                };
-                this.latestTicks.set(rawSym, tick);
-                if (!prev || prev.price !== tick.price || prev.feedMode !== tick.feedMode) {
-                  this.emit('tick', tick);
-                }
-              }
-            } catch {
-              // ignore transient single-symbol yahoo error
-            }
-          })
-        );
+      // Emit Borsa İstanbul (BIST) batch scanner quotes
+      for (const bSym of bistOnly) {
+        const tvTicker = resolveTvSymbol(bSym);
+        const bq = bistMap.get(tvTicker);
+        if (!bq) continue;
+        anyOk = true;
+        const raws = resolvedToRaws.get(bSym) || [bSym];
+        for (const rawSym of raws) {
+          const prev = this.latestTicks.get(rawSym);
+          const tick = {
+            source: 'cme',
+            symbol: rawSym,
+            price: bq.price,
+            time: bq.time,
+            prevClose: bq.prevClose,
+            feedMode: 'delayed',
+            delayMinutes: 15,
+            quoteOnly: false,
+          };
+          this.latestTicks.set(rawSym, tick);
+          if (!prev || prev.price !== tick.price) {
+            this.emit('tick', tick);
+          }
+        }
       }
 
       const nowSec = Math.floor(Date.now() / 1000);

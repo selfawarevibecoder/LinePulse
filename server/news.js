@@ -31,6 +31,280 @@ const TV_COUNTRY_TO_CURRENCY = {
 const cache = new Map(); // cacheKey -> { at, events }
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
+// ============================================================================
+// Major Market Holidays Calendar (US / EU / UK — Computed accurately for ANY year)
+// ============================================================================
+function computeEasterUtc(year) {
+  // Anonymous Gregorian (Meeus/Jones/Butcher) algorithm
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31); // 3=Mar, 4=Apr
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return Date.UTC(year, month - 1, day);
+}
+
+function nthWeekdayUtc(year, monthZero, weekday, nth) {
+  const firstDow = new Date(Date.UTC(year, monthZero, 1)).getUTCDay();
+  const offset = (weekday - firstDow + 7) % 7;
+  return Date.UTC(year, monthZero, 1 + offset + (nth - 1) * 7);
+}
+
+function lastWeekdayUtc(year, monthZero, weekday) {
+  const lastDate = new Date(Date.UTC(year, monthZero + 1, 0));
+  const diff = (lastDate.getUTCDay() - weekday + 7) % 7;
+  return Date.UTC(year, monthZero, lastDate.getUTCDate() - diff);
+}
+
+function observedFixedUtc(year, monthZero, day) {
+  const dt = new Date(Date.UTC(year, monthZero, day));
+  const dow = dt.getUTCDay();
+  if (dow === 6) return Date.UTC(year, monthZero, day - 1); // Sat -> Fri
+  if (dow === 0) return Date.UTC(year, monthZero, day + 1); // Sun -> Mon
+  return dt.getTime();
+}
+
+function buildMarketHolidaysForYear(year) {
+  const DAY = 86400 * 1000;
+  const easter = computeEasterUtc(year);
+  const thanksgiving = nthWeekdayUtc(year, 10, 4, 4); // 4th Thu of Nov
+  const blackFriday = thanksgiving + DAY;
+  const xmasEve = Date.UTC(year, 11, 24);
+  const xmasEveDow = new Date(xmasEve).getUTCDay();
+
+  const raw = [
+    {
+      ms: observedFixedUtc(year, 0, 1),
+      country: 'USD',
+      countryCode: 'US',
+      title: "New Year's Day",
+      titleTr: 'Yılbaşı Tatili (Küresel)',
+      holidayStatus: 'closed',
+      noteEn: 'US, EU, UK & CME Markets Closed',
+      noteTr: 'ABD, Avrupa, İngiltere ve CME Piyasaları Kapalı',
+    },
+    {
+      ms: nthWeekdayUtc(year, 0, 1, 3),
+      country: 'USD',
+      countryCode: 'US',
+      title: 'Martin Luther King Jr. Day',
+      titleTr: 'ABD — Martin Luther King Günü',
+      holidayStatus: 'closed',
+      noteEn: 'NYSE/NASDAQ Closed · CME Early Close (13:00 ET)',
+      noteTr: 'ABD Borsaları Kapalı · CME Vadeli Erken Kapanış',
+    },
+    {
+      ms: nthWeekdayUtc(year, 1, 1, 3),
+      country: 'USD',
+      countryCode: 'US',
+      title: "US Presidents' Day",
+      titleTr: 'ABD — Başkanlar Günü',
+      holidayStatus: 'closed',
+      noteEn: 'NYSE/NASDAQ Closed · CME Early Close (13:00 ET)',
+      noteTr: 'ABD Borsaları Kapalı · CME Vadeli Erken Kapanış',
+    },
+    {
+      ms: easter - 2 * DAY,
+      country: 'USD',
+      countryCode: 'US',
+      title: 'Good Friday',
+      titleTr: 'Kutsal Cuma (Good Friday)',
+      holidayStatus: 'closed',
+      noteEn: 'US, EU, UK & CME Markets Closed',
+      noteTr: 'ABD, Avrupa, İngiltere ve CME Piyasaları Kapalı',
+    },
+    {
+      ms: easter + DAY,
+      country: 'EUR',
+      countryCode: 'EU',
+      title: 'Easter Monday (EU / UK Bank Holiday)',
+      titleTr: 'Paskalya Pazartesisi (Avrupa / Londra)',
+      holidayStatus: 'closed',
+      noteEn: 'EU & UK Banks/Equities Closed · US Open',
+      noteTr: 'Avrupa & Londra Kapalı · ABD Açık (Düşük Likidite)',
+    },
+    {
+      ms: Date.UTC(year, 4, 1),
+      country: 'EUR',
+      countryCode: 'EU',
+      title: 'Europe Labour Day (May 1)',
+      titleTr: 'Avrupa İşçi Bayramı (1 Mayıs)',
+      holidayStatus: 'closed',
+      noteEn: 'Major EU Markets Closed · US & UK Open',
+      noteTr: 'Avrupa Borsaları Kapalı · ABD ve Londra Açık',
+    },
+    {
+      ms: lastWeekdayUtc(year, 4, 1),
+      country: 'USD',
+      countryCode: 'US',
+      title: 'US Memorial Day',
+      titleTr: 'ABD — Anma Günü (Memorial Day)',
+      holidayStatus: 'closed',
+      noteEn: 'NYSE/NASDAQ Closed · CME Early Close (13:00 ET)',
+      noteTr: 'ABD Borsaları Kapalı · CME Vadeli Erken Kapanış',
+    },
+    {
+      ms: lastWeekdayUtc(year, 4, 1),
+      country: 'GBP',
+      countryCode: 'GB',
+      title: 'UK Spring Bank Holiday',
+      titleTr: 'İngiltere Bahar Banka Tatili',
+      holidayStatus: 'closed',
+      noteEn: 'London Banks & LSE Closed',
+      noteTr: 'Londra Bankaları & LSE Kapalı',
+    },
+    {
+      ms: observedFixedUtc(year, 5, 19),
+      country: 'USD',
+      countryCode: 'US',
+      title: 'US Juneteenth National Independence Day',
+      titleTr: 'ABD — Juneteenth Tatili',
+      holidayStatus: 'closed',
+      noteEn: 'NYSE/NASDAQ Closed · CME Early Close (13:00 ET)',
+      noteTr: 'ABD Borsaları Kapalı · CME Vadeli Erken Kapanış',
+    },
+    {
+      ms: observedFixedUtc(year, 6, 4),
+      country: 'USD',
+      countryCode: 'US',
+      title: 'US Independence Day (July 4th)',
+      titleTr: 'ABD — Bağımsızlık Günü (4 Temmuz)',
+      holidayStatus: 'closed',
+      noteEn: 'NYSE/NASDAQ Closed · CME Early Close (13:00 ET)',
+      noteTr: 'ABD Borsaları Kapalı · CME Vadeli Erken Kapanış',
+    },
+    {
+      ms: lastWeekdayUtc(year, 7, 1),
+      country: 'GBP',
+      countryCode: 'GB',
+      title: 'UK Summer Bank Holiday',
+      titleTr: 'İngiltere Yaz Banka Tatili',
+      holidayStatus: 'closed',
+      noteEn: 'London Banks & LSE Closed',
+      noteTr: 'Londra Bankaları & LSE Kapalı',
+    },
+    {
+      ms: nthWeekdayUtc(year, 8, 1, 1),
+      country: 'USD',
+      countryCode: 'US',
+      title: 'US Labor Day',
+      titleTr: 'ABD — İşçi Bayramı (Labor Day)',
+      holidayStatus: 'closed',
+      noteEn: 'NYSE/NASDAQ Closed · CME Early Close (13:00 ET)',
+      noteTr: 'ABD Borsaları Kapalı · CME Vadeli Erken Kapanış',
+    },
+    {
+      ms: thanksgiving,
+      country: 'USD',
+      countryCode: 'US',
+      title: 'US Thanksgiving Day',
+      titleTr: 'ABD — Şükran Günü (Thanksgiving)',
+      holidayStatus: 'closed',
+      noteEn: 'NYSE/NASDAQ Closed · CME Early Close (13:00 ET) — Low Liquidity',
+      noteTr: 'ABD Borsaları Kapalı · CME Erken Kapanış — Düşük Likidite',
+    },
+    {
+      ms: blackFriday,
+      country: 'USD',
+      countryCode: 'US',
+      title: 'US Day After Thanksgiving (Black Friday)',
+      titleTr: 'ABD — Şükran Günü Ertesi (Erken Kapanış)',
+      holidayStatus: 'early_close',
+      noteEn: 'NYSE/NASDAQ & CME Early Close (13:00–13:15 ET) — Thin Liquidity',
+      noteTr: 'ABD & CME Erken Kapanış (TR 21:00) — Sığ Piyasa',
+    },
+    ...(xmasEveDow >= 1 && xmasEveDow <= 5
+      ? [
+          {
+            ms: xmasEve,
+            country: 'USD',
+            countryCode: 'US',
+            title: 'Christmas Eve (Early Close)',
+            titleTr: 'Noel Arifesi (Erken Kapanış)',
+            holidayStatus: 'early_close',
+            noteEn: 'US / UK / EU Markets Early Close — Very Low Liquidity',
+            noteTr: 'ABD / Avrupa / Londra Erken Kapanış — Çok Düşük Likidite',
+          },
+        ]
+      : []),
+    {
+      ms: observedFixedUtc(year, 11, 25),
+      country: 'USD',
+      countryCode: 'US',
+      title: 'Christmas Day',
+      titleTr: 'Noel Tatili (Christmas Day)',
+      holidayStatus: 'closed',
+      noteEn: 'Global Markets Closed (US / EU / UK / CME)',
+      noteTr: 'Küresel Piyasalar Kapalı (ABD / Avrupa / İngiltere / CME)',
+    },
+    {
+      ms: observedFixedUtc(year, 11, 26),
+      country: 'EUR',
+      countryCode: 'EU',
+      title: 'Boxing Day / St. Stephen Day (EU / UK)',
+      titleTr: 'Boxing Day (Avrupa / Londra Kapalı)',
+      holidayStatus: 'closed',
+      noteEn: 'EU & UK Markets Closed · US Open with Holiday Liquidity',
+      noteTr: 'Avrupa & Londra Kapalı · ABD Düşük Likiditeyle Açık',
+    },
+  ];
+
+  return raw.map((h) => {
+    const startSec = Math.floor(h.ms / 1000);
+    return {
+      id: `hol:${h.country}:${startSec}:${h.title}`,
+      isHoliday: true,
+      holidayStatus: h.holidayStatus,
+      title: h.title,
+      titleTr: h.titleTr,
+      country: h.country,
+      countryCode: h.countryCode,
+      time: startSec,
+      endTime: startSec + 86399,
+      impact: 'Holiday',
+      actual: '',
+      forecast: '',
+      previous: '',
+      actualNum: null,
+      forecastNum: null,
+      previousNum: null,
+      period: '',
+      summary: h.noteEn,
+      noteEn: h.noteEn,
+      noteTr: h.noteTr,
+      source: 'Market Holiday',
+    };
+  });
+}
+
+function getMarketHolidaysInRange(fromIso, toIso, region = 'us_eu') {
+  const fromSec = Math.floor(Date.parse(fromIso) / 1000);
+  const toSec = Math.floor(Date.parse(toIso) / 1000);
+  if (!Number.isFinite(fromSec) || !Number.isFinite(toSec)) return [];
+
+  const y1 = new Date(fromSec * 1000).getUTCFullYear();
+  const y2 = new Date(toSec * 1000).getUTCFullYear();
+  const out = [];
+  for (let y = y1; y <= y2; y += 1) {
+    for (const h of buildMarketHolidaysForYear(y)) {
+      if (region !== 'all' && h.country !== 'USD' && h.country !== 'EUR') continue;
+      if (h.endTime >= fromSec && h.time <= toSec) {
+        out.push(h);
+      }
+    }
+  }
+  return out;
+}
+
 function formatVal(num, scale, unit) {
   if (num === null || num === undefined || num === '' || !Number.isFinite(Number(num))) {
     return '';
@@ -199,13 +473,16 @@ export async function fetchEconomicNews({
     }
   }
 
-  if (events.length > 0 || !hit) {
-    cache.set(cacheKey, { at: Date.now(), events });
+  const holidays = getMarketHolidaysInRange(fromIso, toIso, region);
+  const combined = [...holidays, ...events].sort((a, b) => a.time - b.time);
+
+  if (combined.length > 0 || !hit) {
+    cache.set(cacheKey, { at: Date.now(), events: combined });
     if (cache.size > 40) {
       const oldestKey = cache.keys().next().value;
       cache.delete(oldestKey);
     }
   }
 
-  return { events: events.length ? events : hit?.events || [], from: fromIso, to: toIso };
+  return { events: combined.length ? combined : hit?.events || [], from: fromIso, to: toIso };
 }

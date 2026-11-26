@@ -1928,6 +1928,106 @@ body.resizing-row * {
   border-radius: 7px;
 }
 
+.news-holidays-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(129, 140, 248, 0.28);
+}
+
+.news-holidays-header {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a5b4fc;
+  padding: 0 2px;
+}
+
+.news-holiday-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(129, 140, 248, 0.25);
+  border-left: 3px solid #818cf8;
+  background: color-mix(in srgb, var(--bg-surface) 88%, #312e81 12%);
+}
+
+.news-holiday-card.is-early {
+  border-left-color: #f59e0b;
+}
+
+.news-holiday-card.is-today {
+  border-color: rgba(251, 191, 36, 0.55);
+  border-left-color: #fbbf24;
+  background: color-mix(in srgb, var(--bg-surface) 82%, #78350f 18%);
+}
+
+.news-holiday-card.is-past {
+  opacity: 0.65;
+}
+
+.news-hol-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+}
+
+.news-hol-flag {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.news-hol-pill {
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.news-hol-pill.closed {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.news-hol-pill.early {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.news-hol-date {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.news-hol-date.is-today {
+  color: #fbbf24;
+}
+
+.news-hol-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.news-hol-note {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
 .news-past-group {
   margin-top: 6px;
   border: 1px solid var(--border);

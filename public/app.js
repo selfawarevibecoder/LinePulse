@@ -2254,21 +2254,24 @@ function getFilteredNewsEvents() {
   const { inReplay, nowSec, sourceEvents } = getNewsContext();
   return sourceEvents.filter((ev) => {
     if (newsRegion === 'us_eu' && ev.country !== 'USD' && ev.country !== 'EUR') return false;
-    if (newsRedOnly && ev.impact !== 'High') return false;
-    if (!newsRedOnly && ev.impact !== 'High' && ev.impact !== 'Medium') return false;
+    if (!ev.isHoliday) {
+      if (newsRedOnly && ev.impact !== 'High') return false;
+      if (!newsRedOnly && ev.impact !== 'High' && ev.impact !== 'Medium') return false;
+    }
     if (inReplay) {
+      const evEnd = ev.endTime || ev.time;
       if (newsRange === '1d') {
         // Show events on the same simulated UTC day (plus 6h lookahead into next open)
         const dayStart = Math.floor(nowSec / 86400) * 86400;
-        return ev.time >= dayStart && ev.time <= dayStart + 86400 + 6 * 3600;
+        return evEnd >= dayStart && ev.time <= dayStart + 86400 + 6 * 3600;
       }
       if (newsRange === 'this_week') {
         const dow = (new Date(nowSec * 1000).getUTCDay() + 6) % 7;
         const mon = Math.floor(nowSec / 86400) * 86400 - dow * 86400;
-        return ev.time >= mon && ev.time <= mon + 7 * 86400;
+        return evEnd >= mon && ev.time <= mon + 7 * 86400;
       }
       if (newsRange === '1w') {
-        return ev.time >= nowSec - 7 * 86400 && ev.time <= nowSec + 3 * 86400;
+        return evEnd >= nowSec - 7 * 86400 && ev.time <= nowSec + 3 * 86400;
       }
     }
     return true;
@@ -2277,7 +2280,7 @@ function getFilteredNewsEvents() {
 
 function getChartNewsEvents() {
   const { inReplay, nowSec } = getNewsContext();
-  const items = getFilteredNewsEvents();
+  const items = getFilteredNewsEvents().filter((ev) => !ev.isHoliday);
   if (inReplay) {
     return items.filter((ev) => ev.time >= nowSec - 7 * 86400 && ev.time <= nowSec + 7 * 86400);
   }
@@ -2328,6 +2331,47 @@ function formatNewsCountdown(unixSec, refNowSec = Math.floor(Date.now() / 1000))
 }
 
 let newsPastExpanded = false;
+
+function buildHolidayCardEl(ev, { isPast, nowSec, isTr }) {
+  const card = document.createElement('div');
+  const isToday = nowSec >= ev.time && nowSec <= (ev.endTime || ev.time + 86399);
+  const isEarly = ev.holidayStatus === 'early_close';
+  card.className = `news-holiday-card ${isEarly ? 'is-early' : 'is-closed'}${isToday ? ' is-today' : ''}${isPast ? ' is-past' : ''}`;
+  const flag = COUNTRY_FLAGS[ev.country] || '🌐';
+  const dayLabel = new Date(ev.time * 1000).toLocaleDateString(isTr ? 'tr-TR' : 'en-US', {
+    day: '2-digit',
+    month: 'short',
+    weekday: 'short',
+    timeZone: 'UTC',
+  });
+  const statusPill = isEarly
+    ? isTr
+      ? 'ERKEN KAPANIŞ'
+      : 'EARLY CLOSE'
+    : isTr
+      ? 'PİYASA KAPALI'
+      : 'MARKET CLOSED';
+  const whenTag = isToday
+    ? isTr
+      ? 'BUGÜN'
+      : 'TODAY'
+    : isPast
+      ? dayLabel
+      : `${dayLabel}`;
+  const titleTxt = isTr && ev.titleTr ? ev.titleTr : ev.title;
+  const noteTxt = isTr && ev.noteTr ? ev.noteTr : ev.noteEn || ev.summary || '';
+
+  card.innerHTML = `
+    <div class="news-hol-top">
+      <span class="news-hol-flag">🏛️ ${flag} ${escapeHtml(ev.country)}</span>
+      <span class="news-hol-pill ${isEarly ? 'early' : 'closed'}">${statusPill}</span>
+      <span class="news-hol-date${isToday ? ' is-today' : ''}">${escapeHtml(whenTag)}</span>
+    </div>
+    <div class="news-hol-title">${escapeHtml(titleTxt)}</div>
+    ${noteTxt ? `<div class="news-hol-note">${escapeHtml(noteTxt)}</div>` : ''}
+  `;
+  return card;
+}
 
 function buildNewsCardEl(ev, { isPast, isFutureInReplay, nowSec, isTr }) {
   const isMed = ev.impact !== 'High';
@@ -2423,21 +2467,45 @@ function renderNewsPanel() {
     return;
   }
 
+  const activeHolidays = [];
   const upcoming = [];
   const past = [];
   for (const ev of items) {
-    if (ev.time < nowSec - 60) past.push(ev);
-    else upcoming.push(ev);
+    if (ev.isHoliday) {
+      const endSec = ev.endTime || ev.time + 86399;
+      if (endSec < nowSec) past.push(ev);
+      else activeHolidays.push(ev);
+    } else if (ev.time < nowSec - 60) {
+      past.push(ev);
+    } else {
+      upcoming.push(ev);
+    }
   }
 
-  // Render upcoming events prominently first
+  // Dedicated distinct Market Holidays section (always visible at top when active in selected range)
+  if (activeHolidays.length > 0) {
+    const holWrap = document.createElement('div');
+    holWrap.className = 'news-holidays-section';
+    const hdr = document.createElement('div');
+    hdr.className = 'news-holidays-header';
+    hdr.textContent = isTr
+      ? `🏛️ Piyasa Tatilleri (${activeHolidays.length})`
+      : `🏛️ Market Holidays (${activeHolidays.length})`;
+    holWrap.appendChild(hdr);
+    for (const hol of activeHolidays) {
+      holWrap.appendChild(buildHolidayCardEl(hol, { isPast: false, nowSec, isTr }));
+    }
+    newsListEl.appendChild(holWrap);
+  }
+
+  // Render upcoming events prominently next
   if (upcoming.length > 0) {
     for (const ev of upcoming) {
       newsListEl.appendChild(
         buildNewsCardEl(ev, { isPast: false, isFutureInReplay: inReplay && ev.time > nowSec, nowSec, isTr })
       );
     }
-  } else {
+  } else if (activeHolidays.length === 0) {
     const doneBanner = document.createElement('div');
     doneBanner.className = 'news-upcoming-empty';
     doneBanner.textContent = isTr
@@ -2446,7 +2514,7 @@ function renderNewsPanel() {
     newsListEl.appendChild(doneBanner);
   }
 
-  // Tuck elapsed/past events cleanly into a collapsible dropdown (newest past event on top)
+  // Tuck elapsed/past events (and past holidays) cleanly into a collapsible dropdown
   if (past.length > 0) {
     const details = document.createElement('details');
     details.className = 'news-past-group';
@@ -2465,7 +2533,9 @@ function renderNewsPanel() {
     for (let i = past.length - 1; i >= 0; i -= 1) {
       const ev = past[i];
       body.appendChild(
-        buildNewsCardEl(ev, { isPast: true, isFutureInReplay: false, nowSec, isTr })
+        ev.isHoliday
+          ? buildHolidayCardEl(ev, { isPast: true, nowSec, isTr })
+          : buildNewsCardEl(ev, { isPast: true, isFutureInReplay: false, nowSec, isTr })
       );
     }
     details.appendChild(body);

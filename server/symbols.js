@@ -44,6 +44,7 @@ export const CURATED_SYMBOLS = [
   { symbol: '.DXY', display: 'DXY', name: 'US Dollar Index Spot', source: 'cme', exchange: 'ICE', category: 'Index', precision: 3 },
   { symbol: 'TRY=', display: 'USD/TRY', name: 'US Dollar / Turkish Lira (Interbank Spot — Real-Time)', source: 'cme', exchange: 'FX SPOT', category: 'Forex', precision: 4 },
   { symbol: 'EURTRY=', display: 'EUR/TRY', name: 'Euro / Turkish Lira (Interbank Spot — Real-Time)', source: 'cme', exchange: 'FX SPOT', category: 'Forex', precision: 4 },
+  { symbol: 'GBPTRY=', display: 'GBP/TRY', name: 'British Pound / Turkish Lira (£/TRY Interbank Spot — Real-Time)', source: 'cme', exchange: 'FX SPOT', category: 'Forex', precision: 4 },
   { symbol: '@VX.1', display: 'VX1!', name: 'CBOE VIX Futures', source: 'cme', exchange: 'CBOE', category: 'Futures', precision: 2 },
   { symbol: '@C.1', display: 'ZC1!', name: 'CBOT Corn Futures', source: 'cme', exchange: 'CME/CBOT', category: 'Futures', precision: 2 },
   { symbol: '@S.1', display: 'ZS1!', name: 'CBOT Soybean Futures', source: 'cme', exchange: 'CME/CBOT', category: 'Futures', precision: 2 },
@@ -155,6 +156,10 @@ export const CME_SYMBOL_ALIASES = {
   EURTRY: 'EURTRY=',
   'EUR/TRY': 'EURTRY=',
   EUR_TRY: 'EURTRY=',
+  GBPTRY: 'GBPTRY=',
+  'GBP/TRY': 'GBPTRY=',
+  GBP_TRY: 'GBPTRY=',
+  '£TRY': 'GBPTRY=',
 };
 
 export function resolveCmeSymbol(symbol) {

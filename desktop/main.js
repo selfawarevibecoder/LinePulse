@@ -3,6 +3,13 @@ import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { app, BrowserWindow, Menu, shell } from 'electron';
 
+// Prevent Electron 35 / Chromium Windows D3D11/ANGLE 2D-canvas white-box glitches on Intel/AMD/hybrid/RDP GPUs
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IS_PERSONAL_DEV = process.env.LINEPULSE_PERSONAL_DEV === '1' && !app.isPackaged;
 

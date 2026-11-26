@@ -51,6 +51,97 @@ const TWELVEDATA_TF_MAP = {
 
 const historyCache = new Map();
 
+// Yahoo Finance deep-history mapping (multi-month 5m/15m, 2y 1h/4h, 10y+ 1D/1W) for TRY FX Spot & Borsa İstanbul (BIST)
+const YAHOO_FX_MAP = {
+  'TRY=': 'TRY=X',
+  'EURTRY=': 'EURTRY=X',
+  'GBPTRY=': 'GBPTRY=X',
+};
+
+function resolveYahooSymbol(resolved) {
+  const up = String(resolved || '').trim().toUpperCase();
+  if (YAHOO_FX_MAP[up]) return YAHOO_FX_MAP[up];
+  if (up.endsWith('.IS') || up.endsWith('=X')) return up;
+  return null;
+}
+
+function pickYahooSpec(parsed) {
+  if (parsed.unit === 'M') return { interval: '1mo', range: 'max', needsResample: parsed.count > 1 };
+  if (parsed.unit === 'w') return { interval: '1wk', range: '10y', needsResample: parsed.count > 1 };
+  if (parsed.unit === 'd') return { interval: '1d', range: '5y', needsResample: parsed.count > 1 };
+  if (parsed.seconds >= 3600) return { interval: '1h', range: '2y', needsResample: parsed.seconds > 3600 };
+  if (parsed.seconds >= 900) return { interval: '15m', range: '60d', needsResample: parsed.seconds > 900 };
+  if (parsed.seconds >= 300) return { interval: '5m', range: '60d', needsResample: parsed.seconds > 300 };
+  return { interval: '1m', range: '7d', needsResample: parsed.seconds > 60 };
+}
+
+async function fetchYahooBars(yahooSymbol, parsed) {
+  const spec = pickYahooSpec(parsed);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=${spec.interval}&range=${spec.range}&includePrePost=false`;
+  const res = await fetch(url, {
+    headers: BROWSER_HEADERS,
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Yahoo chart HTTP ${res.status}`);
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  if (!result || !Array.isArray(result.timestamp)) {
+    throw new Error(`${yahooSymbol} için grafik verisi bulunamadı`);
+  }
+  const ts = result.timestamp;
+  const q = result.indicators?.quote?.[0] || {};
+  const opens = q.open || [];
+  const highs = q.high || [];
+  const lows = q.low || [];
+  const closes = q.close || [];
+
+  const bars = [];
+  let prevT = -1;
+  const maxAllowedTs = Math.floor(Date.now() / 1000) + 120;
+  for (let i = 0; i < ts.length; i += 1) {
+    const t = Number(ts[i]);
+    const c = Number(closes[i]);
+    if (!Number.isFinite(t) || !Number.isFinite(c) || c <= 0) continue;
+    if (t <= prevT || t > maxAllowedTs) continue;
+    prevT = t;
+    const o = Number(opens[i]);
+    const h = Number(highs[i]);
+    const l = Number(lows[i]);
+    const open = Number.isFinite(o) && o > 0 ? o : c;
+    const high = Number.isFinite(h) && h > 0 ? Math.max(h, open, c) : Math.max(open, c);
+    const low = Number.isFinite(l) && l > 0 ? Math.min(l, open, c) : Math.min(open, c);
+    bars.push({ time: t, open, high, low, close: c });
+  }
+  const finalBars = spec.needsResample ? resampleOhlc(bars, parsed) : bars;
+  return { bars: finalBars, meta: result.meta || {} };
+}
+
+async function fetchYahooLiveQuote(yahooSymbol) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1m&range=1d`;
+  const res = await fetch(url, {
+    headers: BROWSER_HEADERS,
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const meta = json?.chart?.result?.[0]?.meta;
+  if (!meta || !Number.isFinite(Number(meta.regularMarketPrice))) return null;
+  const price = Number(meta.regularMarketPrice);
+  const time = Number(meta.regularMarketTime) || Math.floor(Date.now() / 1000);
+  const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const diffMin = Math.max(0, Math.round((nowSec - time) / 60));
+  const feedMode = diffMin > 45 ? 'closed' : diffMin <= 2 ? 'live' : 'delayed';
+  return {
+    price,
+    time,
+    prevClose: Number.isFinite(prevClose) ? prevClose : null,
+    feedMode,
+    delayMinutes: feedMode === 'delayed' ? Math.min(diffMin, 20) : feedMode === 'live' ? 0 : null,
+    shortName: meta.shortName || meta.longName || yahooSymbol,
+  };
+}
+
 function parseNum(raw) {
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : NaN;
   if (typeof raw !== 'string') return NaN;
@@ -185,6 +276,50 @@ export async function fetchCmeHistory(rawSymbol, tf = '1m', sourceOverride = 'cm
   }
 
   const curated = findCuratedSymbol(sourceOverride, resolved) || findCuratedSymbol('cme', resolved);
+
+  // Yahoo Finance deep multi-year history path for FX Spot TRY pairs & Borsa İstanbul (BIST *.IS)
+  const yahooSym = resolveYahooSymbol(resolved);
+  if (yahooSym) {
+    const isCnbcFx = Boolean(YAHOO_FX_MAP[resolved]);
+    const [yh, cnbcQuotes] = await Promise.all([
+      fetchYahooBars(yahooSym, parsed),
+      isCnbcFx ? fetchCnbcQuotes([resolved]).catch(() => []) : Promise.resolve([]),
+    ]);
+    const bars = yh.bars || [];
+    const meta = yh.meta || {};
+    const cnbcQ = cnbcQuotes[0] || null;
+    const livePx = cnbcQ ? parseNum(cnbcQ.last) : Number(meta.regularMarketPrice);
+    const prevClose = Number(meta.chartPreviousClose ?? meta.previousClose ?? (cnbcQ ? parseNum(cnbcQ.previous_day_closing) : NaN));
+    const lastBar = bars[bars.length - 1] || null;
+    const lastPrice = Number.isFinite(livePx) ? livePx : lastBar?.close ?? null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const mktTime = Number(meta.regularMarketTime) || lastBar?.time || nowSec;
+    const diffMin = Math.max(0, Math.round((nowSec - mktTime) / 60));
+    const feedMode = isCnbcFx
+      ? 'live'
+      : diffMin > 45
+        ? 'closed'
+        : diffMin <= 2
+          ? 'live'
+          : 'delayed';
+    const delayMinutes = feedMode === 'delayed' ? Math.min(diffMin, 20) : feedMode === 'live' ? 0 : null;
+    const payload = {
+      source: sourceOverride,
+      symbol: rawSymbol,
+      display: curated?.display || meta.shortName || rawSymbol,
+      exchange: curated?.exchange || (yahooSym.endsWith('.IS') ? 'BIST' : 'FX SPOT'),
+      tf: parsed.label,
+      bucketSec: parsed.seconds,
+      precision: curated?.precision ?? (yahooSym.endsWith('=X') ? 4 : inferPrecision(lastPrice)),
+      feedMode,
+      delayMinutes,
+      bars,
+      lastPrice,
+      referencePrice: Number.isFinite(prevClose) ? prevClose : bars[0]?.open ?? lastPrice,
+    };
+    historyCache.set(cacheKey, { at: Date.now(), data: payload });
+    return payload;
+  }
 
   const cfg = getConfig();
   if (cfg.TWELVEDATA_API_KEY && !resolved.startsWith('@') && !resolved.startsWith('.')) {
@@ -422,9 +557,45 @@ export class CmePollerManager extends EventEmitter {
       }
 
       const uniqueResolved = Array.from(resolvedToRaws.keys());
-      const quotes = await fetchCnbcQuotes(uniqueResolved);
+      const yahooOnly = uniqueResolved.filter((s) => s.toUpperCase().endsWith('.IS') || s.toUpperCase().endsWith('=X'));
+      const cnbcOnly = uniqueResolved.filter((s) => !yahooOnly.includes(s));
 
+      const quotes = cnbcOnly.length ? await fetchCnbcQuotes(cnbcOnly) : [];
       let anyOk = false;
+
+      // Poll Borsa İstanbul (BIST *.IS) & Yahoo-only tickers cleanly in parallel
+      if (yahooOnly.length) {
+        await Promise.all(
+          yahooOnly.map(async (ySym) => {
+            try {
+              const yq = await fetchYahooLiveQuote(ySym);
+              if (!yq) return;
+              anyOk = true;
+              const raws = resolvedToRaws.get(ySym) || [ySym];
+              for (const rawSym of raws) {
+                const prev = this.latestTicks.get(rawSym);
+                const tick = {
+                  source: 'cme',
+                  symbol: rawSym,
+                  price: yq.price,
+                  time: yq.time,
+                  prevClose: yq.prevClose,
+                  feedMode: yq.feedMode,
+                  delayMinutes: yq.delayMinutes,
+                  quoteOnly: false,
+                };
+                this.latestTicks.set(rawSym, tick);
+                if (!prev || prev.price !== tick.price || prev.feedMode !== tick.feedMode) {
+                  this.emit('tick', tick);
+                }
+              }
+            } catch {
+              // ignore transient single-symbol yahoo error
+            }
+          })
+        );
+      }
+
       const nowSec = Math.floor(Date.now() / 1000);
 
       for (const q of quotes) {

@@ -13,7 +13,7 @@ mobile-android/
 mobile/node_modules/
 mobile/android/
 mobile/ios/
-mobile/www/
+mobile/www/*
 !mobile/www/standalone-public.js
 oracle-deploy/
 
